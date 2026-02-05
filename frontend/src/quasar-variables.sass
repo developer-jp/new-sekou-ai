@@ -1,0 +1,47 @@
+// SekouAI Theme - Modern Dark/Light Theme
+// Inspired by Gemini's clean aesthetic
+
+$primary   : #8B5CF6  // 紫色主色调
+$secondary : #6366F1  // 靛蓝色
+$accent    : #EC4899  // 粉色点缀
+
+$dark      : #1a1a2e  // 深色背景
+$dark-page : #16213e  // 深色页面
+
+$positive  : #10B981  // 绿色成功
+$negative  : #EF4444  // 红色错误
+$info      : #3B82F6  // 蓝色信息
+$warning   : #F59E0B  // 橙色警告
+
+// Light theme overrides for Quasar components
+.body--light
+  .q-card
+    background: var(--bg-card-solid)
+    color: var(--text-primary)
+  
+  .q-item
+    color: var(--text-secondary)
+  
+  .q-field__control
+    color: var(--text-primary)
+  
+  .q-field--outlined .q-field__control:before
+    border-color: var(--border-color)
+  
+  .q-separator
+    background: var(--border-color)
+
+  .q-menu
+    background: var(--bg-card-solid)
+    border: 1px solid var(--border-color)
+  
+  .q-list
+    color: var(--text-primary)
+  
+  .q-drawer
+    background: var(--bg-card-solid)
+    border-color: var(--border-color)
+
+  .q-header
+    background: var(--bg-card)
+    border-color: var(--border-color)
