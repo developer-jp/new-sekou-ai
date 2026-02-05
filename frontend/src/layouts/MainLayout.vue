@@ -33,7 +33,16 @@ function toggleLeftDrawer() {
 }
 
 function handleMenuClick(action: string) {
-  console.log('Menu action:', action)
+  switch (action) {
+    case 'settings':
+      router.push('/settings')
+      break
+    case 'new':
+      router.push('/')
+      break
+    default:
+      console.log('Menu action:', action)
+  }
 }
 
 function handleLogin() {
