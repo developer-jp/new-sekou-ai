@@ -5,6 +5,8 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\AiModelController;
 use App\Http\Controllers\ConversationController;
+use App\Http\Controllers\FeatureController;
+use App\Http\Controllers\FeaturePromptController;
 
 // 認証不要のルート
 Route::post('/register', [AuthController::class, 'register']);
@@ -28,5 +30,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/conversations/{id}', [ConversationController::class, 'show']);
     Route::put('/conversations/{id}', [ConversationController::class, 'update']);
     Route::delete('/conversations/{id}', [ConversationController::class, 'destroy']);
-});
 
+    // Feature routes
+    Route::get('/features', [FeatureController::class, 'index']);
+    Route::post('/features', [FeatureController::class, 'store']);
+    Route::get('/features/{id}', [FeatureController::class, 'show']);
+    Route::put('/features/{id}', [FeatureController::class, 'update']);
+    Route::delete('/features/{id}', [FeatureController::class, 'destroy']);
+
+    // Feature Prompt routes
+    Route::post('/features/{featureId}/prompts', [FeaturePromptController::class, 'store']);
+    Route::put('/prompts/{id}', [FeaturePromptController::class, 'update']);
+    Route::delete('/prompts/{id}', [FeaturePromptController::class, 'destroy']);
+});

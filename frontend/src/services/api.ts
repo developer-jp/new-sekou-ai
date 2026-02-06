@@ -272,6 +272,133 @@ class ApiService {
       return { success: false }
     }
   }
+
+  // Feature API methods
+  async getFeatures(): Promise<FeaturesResponse> {
+    const url = `${API_BASE_URL}/api/features`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: this.getHeaders(),
+      })
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      return { success: false, features: [] }
+    }
+  }
+
+  async createFeature(title: string): Promise<FeatureCreateResponse> {
+    const url = `${API_BASE_URL}/api/features`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ title }),
+      })
+
+      return await response.json()
+    } catch (error) {
+      return { success: false }
+    }
+  }
+
+  async getFeature(id: number): Promise<FeatureDetailResponse> {
+    const url = `${API_BASE_URL}/api/features/${id}`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: this.getHeaders(),
+      })
+
+      return await response.json()
+    } catch (error) {
+      return { success: false, feature: null }
+    }
+  }
+
+  async updateFeature(id: number, title: string): Promise<FeatureCreateResponse> {
+    const url = `${API_BASE_URL}/api/features/${id}`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ title }),
+      })
+
+      return await response.json()
+    } catch (error) {
+      return { success: false }
+    }
+  }
+
+  async deleteFeature(id: number): Promise<{ success: boolean }> {
+    const url = `${API_BASE_URL}/api/features/${id}`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      })
+
+      return await response.json()
+    } catch (error) {
+      return { success: false }
+    }
+  }
+
+  // Feature Prompt API methods
+  async createPrompt(featureId: number, data: Partial<FeaturePrompt>): Promise<PromptCreateResponse> {
+    const url = `${API_BASE_URL}/api/features/${featureId}/prompts`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(data),
+      })
+
+      return await response.json()
+    } catch (error) {
+      return { success: false }
+    }
+  }
+
+  async updatePrompt(id: number, data: Partial<FeaturePrompt>): Promise<PromptCreateResponse> {
+    const url = `${API_BASE_URL}/api/prompts/${id}`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: this.getHeaders(),
+        body: JSON.stringify(data),
+      })
+
+      return await response.json()
+    } catch (error) {
+      return { success: false }
+    }
+  }
+
+  async deletePrompt(id: number): Promise<{ success: boolean }> {
+    const url = `${API_BASE_URL}/api/prompts/${id}`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      })
+
+      return await response.json()
+    } catch (error) {
+      return { success: false }
+    }
+  }
 }
 
 interface ConversationSummary {
@@ -305,6 +432,47 @@ interface ConversationDetailResponse {
   conversation: ConversationDetail | null
 }
 
+// Feature interfaces
+interface Feature {
+  id: number
+  user_id: number
+  title: string
+  prompts_count?: number
+  prompts?: FeaturePrompt[]
+  created_at: string
+  updated_at: string
+}
+
+interface FeaturePrompt {
+  id: number
+  feature_id: number
+  title: string
+  prompt_content: string | null
+  description: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface FeaturesResponse {
+  success: boolean
+  features: Feature[]
+}
+
+interface FeatureCreateResponse {
+  success: boolean
+  feature?: Feature
+}
+
+interface FeatureDetailResponse {
+  success: boolean
+  feature: Feature | null
+}
+
+interface PromptCreateResponse {
+  success: boolean
+  prompt?: FeaturePrompt
+}
+
 export const api = new ApiService()
 export type { 
   User, 
@@ -319,8 +487,15 @@ export type {
   ConversationMessage,
   ConversationDetail,
   ConversationsResponse,
-  ConversationDetailResponse
+  ConversationDetailResponse,
+  Feature,
+  FeaturePrompt,
+  FeaturesResponse,
+  FeatureCreateResponse,
+  FeatureDetailResponse,
+  PromptCreateResponse
 }
+
 
 
 

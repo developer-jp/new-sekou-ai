@@ -6,6 +6,7 @@ import { useUserStore } from '../stores/user'
 import { useThemeStore } from '../stores/theme'
 import { useConversationStore } from '../stores/conversation'
 import { useChatStore } from '../stores/chat'
+import { useFeatureStore } from '../stores/feature'
 
 const $q = useQuasar()
 const router = useRouter()
@@ -13,6 +14,7 @@ const userStore = useUserStore()
 const themeStore = useThemeStore()
 const conversationStore = useConversationStore()
 const chatStore = useChatStore()
+const featureStore = useFeatureStore()
 const leftDrawerOpen = ref(false)
 
 const isDarkMode = computed(() => themeStore.mode === 'dark')
@@ -20,25 +22,28 @@ const conversations = computed(() => conversationStore.conversations)
 const sidebarConversations = computed(() => conversations.value.slice(0, 5))
 const hasMoreConversations = computed(() => conversations.value.length > 5)
 const currentConversationId = computed(() => conversationStore.currentConversationId)
+const features = computed(() => featureStore.features)
+
+// Feature dialog state
+const showFeatureDialog = ref(false)
+const newFeatureTitle = ref('')
+const creatingFeature = ref(false)
 
 onMounted(async () => {
   await userStore.init()
   if (userStore.isLoggedIn) {
     await conversationStore.loadConversations()
+    await featureStore.loadFeatures()
   }
 })
 
-// Reload conversations when user logs in
+// Reload data when user logs in
 watch(() => userStore.isLoggedIn, async (isLoggedIn) => {
   if (isLoggedIn) {
     await conversationStore.loadConversations()
+    await featureStore.loadFeatures()
   }
 })
-
-const bottomMenuItems = [
-  { icon: 'settings', label: '設定', action: 'settings' },
-  { icon: 'help', label: 'ヘルプ', action: 'help' },
-]
 
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value
@@ -116,7 +121,50 @@ async function handleLogout() {
 function toggleTheme() {
   themeStore.toggleTheme()
 }
+
+// Feature management functions
+function openFeatureDialog() {
+  newFeatureTitle.value = ''
+  showFeatureDialog.value = true
+}
+
+async function createFeature() {
+  if (!newFeatureTitle.value.trim()) return
+  
+  creatingFeature.value = true
+  try {
+    const feature = await featureStore.createFeature(newFeatureTitle.value.trim())
+    if (feature) {
+      showFeatureDialog.value = false
+      $q.notify({
+        type: 'positive',
+        message: '機能を作成しました',
+        position: 'top',
+        timeout: 1500,
+      })
+    }
+  } finally {
+    creatingFeature.value = false
+  }
+}
+
+function goToPromptEdit(featureId: number) {
+  router.push(`/features/${featureId}/prompts`)
+}
+
+async function deleteFeature(id: number) {
+  const success = await featureStore.deleteFeature(id)
+  if (success) {
+    $q.notify({
+      type: 'positive',
+      message: '機能を削除しました',
+      position: 'top',
+      timeout: 1500,
+    })
+  }
+}
 </script>
+
 
 <template>
   <q-layout view="lHh LpR lFf" class="main-layout">
@@ -271,33 +319,125 @@ function toggleTheme() {
             </div>
           </div>
 
-          <q-space />
-
-          <!-- 底部菜单 -->
-          <q-list class="menu-list bottom-menu">
-            <q-separator class="q-my-sm" />
-            <q-item
-              v-for="item in bottomMenuItems"
-              :key="item.action"
-              clickable
-              v-ripple
-              class="menu-item"
-              @click="handleMenuClick(item.action)"
-            >
-              <q-item-section avatar>
-                <q-icon :name="item.icon" />
-              </q-item-section>
-              <q-item-section>{{ item.label }}</q-item-section>
-            </q-item>
-          </q-list>
+          <!-- 機能リスト -->
+          <div class="feature-section">
+            <div class="section-header">
+              <div class="section-title">機能一覧</div>
+              <q-btn
+                flat
+                round
+                dense
+                size="sm"
+                icon="add"
+                color="primary"
+                @click="openFeatureDialog"
+              >
+                <q-tooltip>功能追加</q-tooltip>
+              </q-btn>
+            </div>
+            <q-list v-if="features.length > 0" class="feature-list">
+              <q-item
+                v-for="feature in features"
+                :key="feature.id"
+                class="feature-item"
+              >
+                <q-item-section>
+                  <q-item-label class="feature-title" lines="1">
+                    {{ feature.title }}
+                  </q-item-label>
+                  <q-item-label caption>
+                    {{ feature.prompts_count || 0 }} プロンプト
+                  </q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    size="sm"
+                    icon="more_vert"
+                    class="more-btn"
+                  >
+                    <q-menu anchor="bottom right" self="top right">
+                      <q-list style="min-width: 150px">
+                        <q-item clickable v-close-popup @click="goToPromptEdit(feature.id)">
+                          <q-item-section avatar>
+                            <q-icon name="edit" size="20px" />
+                          </q-item-section>
+                          <q-item-section>Prompt編集</q-item-section>
+                        </q-item>
+                        <q-item clickable v-close-popup @click="deleteFeature(feature.id)">
+                          <q-item-section avatar>
+                            <q-icon name="delete" size="20px" color="negative" />
+                          </q-item-section>
+                          <q-item-section class="text-negative">削除</q-item-section>
+                        </q-item>
+                      </q-list>
+                    </q-menu>
+                  </q-btn>
+                </q-item-section>
+              </q-item>
+            </q-list>
+            <div v-else class="no-features">
+              機能がありません
+            </div>
+          </div>
         </div>
       </q-scroll-area>
+
+      <!-- 底部設定ボタン（固定） -->
+      <div class="bottom-menu-fixed">
+        <q-separator />
+        <q-item
+          clickable
+          v-ripple
+          class="menu-item"
+          @click="handleMenuClick('settings')"
+        >
+          <q-item-section avatar>
+            <q-icon name="settings" />
+          </q-item-section>
+          <q-item-section>設定</q-item-section>
+        </q-item>
+      </div>
     </q-drawer>
 
     <!-- Page Container -->
     <q-page-container>
       <router-view />
     </q-page-container>
+
+    <!-- Feature Create Dialog -->
+    <q-dialog v-model="showFeatureDialog">
+      <q-card style="min-width: 350px">
+        <q-card-section>
+          <div class="text-h6">功能追加</div>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <q-input
+            v-model="newFeatureTitle"
+            autofocus
+            label="機能タイトル"
+            outlined
+            dense
+            @keyup.enter="createFeature"
+          />
+        </q-card-section>
+
+        <q-card-actions align="right" class="q-px-md q-pb-md">
+          <q-btn flat label="キャンセル" v-close-popup />
+          <q-btn
+            unelevated
+            color="primary"
+            label="作成"
+            :loading="creatingFeature"
+            :disable="!newFeatureTitle.trim()"
+            @click="createFeature"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-layout>
 </template>
 
@@ -440,4 +580,68 @@ function toggleTheme() {
 
   &:hover
     background: var(--bg-hover)
+
+// Feature section styles
+.feature-section
+  margin-top: 16px
+
+.section-header
+  display: flex
+  align-items: center
+  justify-content: space-between
+  padding: 0 8px
+  margin-bottom: 8px
+
+.feature-list
+  padding: 0
+
+.feature-item
+  border-radius: 8px
+  margin-bottom: 2px
+  padding: 8px 12px
+  min-height: 48px
+  color: var(--text-secondary)
+  transition: all 0.2s ease
+
+  &:hover
+    background: var(--bg-hover)
+    color: var(--text-primary)
+
+    .more-btn
+      opacity: 1
+
+.feature-title
+  font-size: 0.875rem
+  font-weight: 500
+
+.more-btn
+  opacity: 0.5
+  color: var(--text-tertiary)
+  transition: opacity 0.2s ease
+
+  &:hover
+    color: var(--text-primary)
+
+.no-features
+  color: var(--text-tertiary)
+  font-size: 0.875rem
+  text-align: center
+  padding: 16px
+
+.bottom-menu-fixed
+  position: absolute
+  bottom: 0
+  left: 0
+  right: 0
+  background: var(--drawer-bg, var(--bg-card-solid))
+  padding: 8px 16px
+
+  .menu-item
+    border-radius: 12px
+    color: var(--text-secondary)
+    transition: background 0.3s ease, color 0.3s ease
+
+    &:hover
+      background: var(--bg-hover)
+      color: var(--text-primary)
 </style>

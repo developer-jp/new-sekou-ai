@@ -24,6 +24,11 @@ const routes = [
         path: 'history',
         name: 'history',
         component: () => import('../pages/HistoryPage.vue')
+      },
+      {
+        path: 'features/:id/prompts',
+        name: 'prompt-edit',
+        component: () => import('../pages/PromptEditPage.vue')
       }
     ]
   }
