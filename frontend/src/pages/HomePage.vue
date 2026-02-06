@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
+import { useQuasar } from 'quasar'
 import { useChatStore } from '../stores/chat'
+import { useConversationStore } from '../stores/conversation'
 import type { ChatHistory } from '../services/api'
 
 const chatStore = useChatStore()
+const conversationStore = useConversationStore()
 
 const inputMessage = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -44,6 +47,7 @@ async function handleSend() {
   try {
     const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost.sekouAI.com'
     const token = localStorage.getItem('auth_token')
+    const conversationId = conversationStore.currentConversationId
     
     const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
       method: 'POST',
@@ -52,7 +56,11 @@ async function handleSend() {
         'Accept': 'text/event-stream',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({ message, history }),
+      body: JSON.stringify({ 
+        message, 
+        history,
+        conversation_id: conversationId 
+      }),
     })
 
     if (!response.ok) {
@@ -79,6 +87,15 @@ async function handleSend() {
             }
             try {
               const parsed = JSON.parse(data)
+              // Handle conversation_id from first SSE message
+              if (parsed.conversation_id && !conversationStore.currentConversationId) {
+                conversationStore.addConversation({
+                  id: parsed.conversation_id,
+                  title: message.substring(0, 50),
+                  last_message_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                })
+              }
               if (parsed.content) {
                 accumulatedContent += parsed.content
                 chatStore.updateLastAssistantMessage(accumulatedContent)
@@ -113,6 +130,21 @@ function handleSuggestionClick(text: string) {
   inputMessage.value = text
 }
 
+function handleKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Enter') {
+    // Command+Enter (Mac) or Ctrl+Enter (Windows/Linux) = new line
+    if (event.metaKey || event.ctrlKey) {
+      event.preventDefault()
+      inputMessage.value += '\n'
+    } 
+    // Enter alone = send message (Shift+Enter still allows newline by default)
+    else if (!event.shiftKey) {
+      event.preventDefault()
+      handleSend()
+    }
+  }
+}
+
 function scrollToBottom() {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
@@ -126,6 +158,25 @@ function formatMessage(content: string): string {
     .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\n/g, '<br>')
+}
+
+const $q = useQuasar()
+
+function copyToClipboard(content: string) {
+  navigator.clipboard.writeText(content).then(() => {
+    $q.notify({
+      type: 'positive',
+      message: 'コピーしました',
+      position: 'top',
+      timeout: 1500,
+    })
+  }).catch(() => {
+    $q.notify({
+      type: 'negative',
+      message: 'コピーに失敗しました',
+      position: 'top',
+    })
+  })
 }
 </script>
 
@@ -169,16 +220,10 @@ function formatMessage(content: string): string {
           class="message"
           :class="[`message--${message.role}`]"
         >
-          <div class="message-avatar">
-            <q-icon
-              :name="message.role === 'user' ? 'person' : 'smart_toy'"
-              size="20px"
-            />
+          <div v-if="message.role === 'assistant'" class="message-avatar">
+            <q-icon name="smart_toy" size="20px" />
           </div>
           <div class="message-content">
-            <div class="message-role">
-              {{ message.role === 'user' ? 'あなた' : 'SekouAI' }}
-            </div>
             <div
               v-if="message.content"
               class="message-text"
@@ -186,6 +231,19 @@ function formatMessage(content: string): string {
             ></div>
             <div v-else class="message-loading">
               <q-spinner-dots size="24px" color="primary" />
+            </div>
+            <!-- Copy button for assistant messages -->
+            <div v-if="message.role === 'assistant' && message.content" class="message-actions">
+              <q-btn
+                flat
+                dense
+                size="sm"
+                icon="content_copy"
+                class="copy-btn"
+                @click="copyToClipboard(message.content)"
+              >
+                <q-tooltip>コピー</q-tooltip>
+              </q-btn>
             </div>
           </div>
         </div>
@@ -198,9 +256,11 @@ function formatMessage(content: string): string {
             v-model="inputMessage"
             placeholder="質問を入力してください..."
             borderless
+            type="textarea"
+            autogrow
             class="chat-input"
             :disable="isLoading"
-            @keyup.enter="handleSend"
+            @keydown="handleKeyDown"
           >
             <template #prepend>
               <q-icon name="auto_awesome" color="primary" />
@@ -252,7 +312,7 @@ function formatMessage(content: string): string {
 
 .content-container
   width: 100%
-  max-width: 800px
+  max-width: 1040px
   display: flex
   flex-direction: column
   gap: 40px
@@ -318,32 +378,50 @@ function formatMessage(content: string): string {
   padding: 20px 0
   display: flex
   flex-direction: column
-  gap: 24px
+  gap: 16px
 
 .message
   display: flex
-  gap: 16px
+  gap: 12px
   animation: fadeIn 0.3s ease
+  max-width: 80%
 
   &--user
+    flex-direction: row-reverse
+    align-self: flex-end
+
     .message-avatar
       background: linear-gradient(135deg, #8B5CF6, #6366F1)
       color: white
 
     .message-content
-      background: var(--bg-input)
+      background: linear-gradient(135deg, #8B5CF6, #6366F1)
+      color: white
+      border-radius: 20px 20px 4px 20px
+
+    .message-role
+      text-align: right
+      color: rgba(255, 255, 255, 0.8)
+
+    .message-text
+      color: white
 
   &--assistant
+    flex-direction: row
+    align-self: flex-start
+
     .message-avatar
       background: linear-gradient(135deg, #10B981, #059669)
       color: white
 
     .message-content
       background: transparent
+      border: none
+      padding-left: 0
 
 .message-avatar
-  width: 36px
-  height: 36px
+  width: 32px
+  height: 32px
   border-radius: 50%
   display: flex
   align-items: center
@@ -354,6 +432,21 @@ function formatMessage(content: string): string {
   flex: 1
   border-radius: 16px
   padding: 12px 16px
+  max-width: 100%
+
+.message-actions
+  display: flex
+  gap: 8px
+  margin-top: 8px
+
+.copy-btn
+  color: var(--text-tertiary)
+  opacity: 0.6
+  transition: all 0.2s ease
+  
+  &:hover
+    opacity: 1
+    color: var(--accent-primary)
 
 .message-role
   font-size: 0.8rem

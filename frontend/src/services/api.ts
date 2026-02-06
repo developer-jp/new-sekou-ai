@@ -218,9 +218,109 @@ class ApiService {
       }
     }
   }
+
+  // Conversation API methods
+  async getConversations(): Promise<ConversationsResponse> {
+    const url = `${API_BASE_URL}/api/conversations`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: this.getHeaders(),
+      })
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      return {
+        success: false,
+        conversations: [],
+      }
+    }
+  }
+
+  async getConversation(id: number): Promise<ConversationDetailResponse> {
+    const url = `${API_BASE_URL}/api/conversations/${id}`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: this.getHeaders(),
+      })
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      return {
+        success: false,
+        conversation: null,
+      }
+    }
+  }
+
+  async deleteConversation(id: number): Promise<{ success: boolean }> {
+    const url = `${API_BASE_URL}/api/conversations/${id}`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      })
+
+      return await response.json()
+    } catch (error) {
+      return { success: false }
+    }
+  }
+}
+
+interface ConversationSummary {
+  id: number
+  title: string | null
+  last_message_at: string | null
+  created_at: string
+}
+
+interface ConversationMessage {
+  id: number
+  conversation_id: number
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
+
+interface ConversationDetail {
+  id: number
+  title: string | null
+  messages: ConversationMessage[]
+}
+
+interface ConversationsResponse {
+  success: boolean
+  conversations: ConversationSummary[]
+}
+
+interface ConversationDetailResponse {
+  success: boolean
+  conversation: ConversationDetail | null
 }
 
 export const api = new ApiService()
-export type { User, LoginData, RegisterData, ApiResponse, ChatHistory, ChatResponse, AiModel, AiModelsResponse }
+export type { 
+  User, 
+  LoginData, 
+  RegisterData, 
+  ApiResponse, 
+  ChatHistory, 
+  ChatResponse, 
+  AiModel, 
+  AiModelsResponse,
+  ConversationSummary,
+  ConversationMessage,
+  ConversationDetail,
+  ConversationsResponse,
+  ConversationDetailResponse
+}
+
 
 

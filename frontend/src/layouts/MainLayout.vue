@@ -1,27 +1,39 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useThemeStore } from '../stores/theme'
+import { useConversationStore } from '../stores/conversation'
+import { useChatStore } from '../stores/chat'
 
 const $q = useQuasar()
 const router = useRouter()
 const userStore = useUserStore()
 const themeStore = useThemeStore()
+const conversationStore = useConversationStore()
+const chatStore = useChatStore()
 const leftDrawerOpen = ref(false)
 
 const isDarkMode = computed(() => themeStore.mode === 'dark')
+const conversations = computed(() => conversationStore.conversations)
+const sidebarConversations = computed(() => conversations.value.slice(0, 5))
+const hasMoreConversations = computed(() => conversations.value.length > 5)
+const currentConversationId = computed(() => conversationStore.currentConversationId)
 
-onMounted(() => {
-  userStore.init()
+onMounted(async () => {
+  await userStore.init()
+  if (userStore.isLoggedIn) {
+    await conversationStore.loadConversations()
+  }
 })
 
-const menuItems = [
-  { icon: 'add_circle', label: '新しいチャット', action: 'new' },
-  { icon: 'history', label: '履歴', action: 'history' },
-  { icon: 'star', label: 'お気に入り', action: 'favorites' },
-]
+// Reload conversations when user logs in
+watch(() => userStore.isLoggedIn, async (isLoggedIn) => {
+  if (isLoggedIn) {
+    await conversationStore.loadConversations()
+  }
+})
 
 const bottomMenuItems = [
   { icon: 'settings', label: '設定', action: 'settings' },
@@ -38,11 +50,52 @@ function handleMenuClick(action: string) {
       router.push('/settings')
       break
     case 'new':
-      router.push('/')
+      startNewChat()
       break
     default:
       console.log('Menu action:', action)
   }
+}
+
+function startNewChat() {
+  chatStore.clearMessages()
+  conversationStore.clearCurrentConversation()
+  router.push('/')
+}
+
+async function selectConversation(id: number) {
+  const messages = await conversationStore.loadConversation(id)
+  chatStore.clearMessages()
+  messages.forEach(m => {
+    chatStore.addMessage(m.role, m.content)
+  })
+  router.push('/')
+}
+
+async function deleteConversation(id: number, event: Event) {
+  event.stopPropagation()
+  const success = await conversationStore.deleteConversation(id)
+  if (success) {
+    $q.notify({
+      type: 'positive',
+      message: '会話を削除しました',
+      position: 'top',
+      timeout: 1500,
+    })
+  }
+}
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  
+  if (days === 0) return '今日'
+  if (days === 1) return '昨日'
+  if (days < 7) return `${days}日前`
+  return date.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })
 }
 
 function handleLogin() {
@@ -51,6 +104,8 @@ function handleLogin() {
 
 async function handleLogout() {
   await userStore.logout()
+  chatStore.clearMessages()
+  conversationStore.clearCurrentConversation()
   $q.notify({
     type: 'positive',
     message: 'ログアウトしました',
@@ -154,22 +209,67 @@ function toggleTheme() {
             @click="handleMenuClick('new')"
           />
 
-          <!-- 主菜单 -->
-          <q-list class="menu-list">
+          <!-- 会话历史列表 -->
+          <div class="conversation-section">
+            <div class="section-title">履歴</div>
+            <q-list v-if="sidebarConversations.length > 0" class="conversation-list">
+              <q-item
+                v-for="conv in sidebarConversations"
+                :key="conv.id"
+                clickable
+                v-ripple
+                class="conversation-item"
+                :class="{ active: conv.id === currentConversationId }"
+                @click="selectConversation(conv.id)"
+              >
+                <q-item-section avatar>
+                  <q-icon name="chat_bubble_outline" size="20px" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label class="conversation-title" lines="1">
+                    {{ conv.title || '新しいチャット' }}
+                  </q-item-label>
+                  <q-item-label caption>
+                    {{ formatDate(conv.last_message_at) }}
+                  </q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    size="sm"
+                    icon="delete_outline"
+                    class="delete-btn"
+                    @click="deleteConversation(conv.id, $event)"
+                  >
+                    <q-tooltip>削除</q-tooltip>
+                  </q-btn>
+                </q-item-section>
+              </q-item>
+            </q-list>
+            <!-- View All Link -->
             <q-item
-              v-for="item in menuItems.slice(1)"
-              :key="item.action"
+              v-if="hasMoreConversations || sidebarConversations.length > 0"
               clickable
               v-ripple
-              class="menu-item"
-              @click="handleMenuClick(item.action)"
+              class="view-all-item"
+              @click="$router.push('/history')"
             >
               <q-item-section avatar>
-                <q-icon :name="item.icon" />
+                <q-icon name="history" size="20px" />
               </q-item-section>
-              <q-item-section>{{ item.label }}</q-item-section>
+              <q-item-section>
+                {{ hasMoreConversations ? 'すべての履歴を表示' : '履歴を管理' }}
+              </q-item-section>
+              <q-item-section side>
+                <q-icon name="chevron_right" size="20px" />
+              </q-item-section>
             </q-item>
-          </q-list>
+            <div v-if="sidebarConversations.length === 0" class="no-conversations">
+              履歴がありません
+            </div>
+          </div>
 
           <q-space />
 
@@ -276,4 +376,68 @@ function toggleTheme() {
 
 .bottom-menu
   margin-top: auto
+
+.conversation-section
+  flex: 1
+  overflow-y: auto
+  margin-top: 16px
+
+.section-title
+  font-size: 0.75rem
+  font-weight: 600
+  color: var(--text-tertiary)
+  text-transform: uppercase
+  letter-spacing: 0.05em
+  padding: 0 8px
+  margin-bottom: 8px
+
+.conversation-list
+  padding: 0
+
+.conversation-item
+  border-radius: 8px
+  margin-bottom: 2px
+  padding: 8px 12px
+  min-height: 48px
+  color: var(--text-secondary)
+  transition: all 0.2s ease
+
+  &:hover
+    background: var(--bg-hover)
+    color: var(--text-primary)
+
+    .delete-btn
+      opacity: 1
+
+  &.active
+    background: var(--bg-accent, rgba(139, 92, 246, 0.1))
+    color: var(--accent-primary)
+
+.conversation-title
+  font-size: 0.875rem
+  font-weight: 500
+
+.delete-btn
+  opacity: 0
+  color: var(--text-tertiary)
+  transition: opacity 0.2s ease
+
+  &:hover
+    color: #ef4444
+
+.no-conversations
+  color: var(--text-tertiary)
+  font-size: 0.875rem
+  text-align: center
+  padding: 24px 16px
+
+.view-all-item
+  border-radius: 8px
+  margin-top: 8px
+  color: var(--accent-primary)
+  font-size: 0.875rem
+  transition: all 0.2s ease
+
+  &:hover
+    background: var(--bg-hover)
 </style>
