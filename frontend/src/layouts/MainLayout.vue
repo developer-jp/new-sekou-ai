@@ -18,6 +18,7 @@ const featureStore = useFeatureStore()
 const leftDrawerOpen = ref(false)
 
 const isDarkMode = computed(() => themeStore.mode === 'dark')
+const isAdmin = computed(() => userStore.isAdmin)
 const conversations = computed(() => conversationStore.conversations)
 const sidebarConversations = computed(() => conversations.value.slice(0, 5))
 const hasMoreConversations = computed(() => conversations.value.length > 5)
@@ -28,6 +29,12 @@ const features = computed(() => featureStore.features)
 const showFeatureDialog = ref(false)
 const newFeatureTitle = ref('')
 const creatingFeature = ref(false)
+
+// Edit feature dialog state
+const showEditFeatureDialog = ref(false)
+const editingFeatureId = ref<number | null>(null)
+const editFeatureTitle = ref('')
+const savingFeature = ref(false)
 
 onMounted(async () => {
   await userStore.init()
@@ -44,6 +51,14 @@ watch(() => userStore.isLoggedIn, async (isLoggedIn) => {
     await featureStore.loadFeatures()
   }
 })
+
+// Debug: Log isAdmin value
+watch(() => userStore.user, (user) => {
+  console.log('User updated:', user)
+  console.log('user.is_admin:', user?.is_admin)
+  console.log('userStore.isAdmin:', userStore.isAdmin)
+  console.log('isAdmin computed:', isAdmin.value)
+}, { immediate: true })
 
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value
@@ -161,6 +176,33 @@ async function deleteFeature(id: number) {
       position: 'top',
       timeout: 1500,
     })
+  }
+}
+
+// Edit feature functions
+function openEditFeatureDialog(id: number, title: string) {
+  editingFeatureId.value = id
+  editFeatureTitle.value = title
+  showEditFeatureDialog.value = true
+}
+
+async function saveEditFeature() {
+  if (!editingFeatureId.value || !editFeatureTitle.value.trim()) return
+  
+  savingFeature.value = true
+  try {
+    const success = await featureStore.updateFeature(editingFeatureId.value, editFeatureTitle.value.trim())
+    if (success) {
+      showEditFeatureDialog.value = false
+      $q.notify({
+        type: 'positive',
+        message: '機能名を更新しました',
+        position: 'top',
+        timeout: 1500,
+      })
+    }
+  } finally {
+    savingFeature.value = false
   }
 }
 </script>
@@ -324,6 +366,7 @@ async function deleteFeature(id: number) {
             <div class="section-header">
               <div class="section-title">機能一覧</div>
               <q-btn
+                v-if="isAdmin"
                 flat
                 round
                 dense
@@ -349,7 +392,7 @@ async function deleteFeature(id: number) {
                     {{ feature.prompts_count || 0 }} プロンプト
                   </q-item-label>
                 </q-item-section>
-                <q-item-section side>
+                <q-item-section v-if="isAdmin" side>
                   <q-btn
                     flat
                     round
@@ -360,12 +403,19 @@ async function deleteFeature(id: number) {
                   >
                     <q-menu anchor="bottom right" self="top right">
                       <q-list style="min-width: 150px">
+                        <q-item clickable v-close-popup @click="openEditFeatureDialog(feature.id, feature.title)">
+                          <q-item-section avatar>
+                            <q-icon name="edit_note" size="20px" />
+                          </q-item-section>
+                          <q-item-section>機能名編集</q-item-section>
+                        </q-item>
                         <q-item clickable v-close-popup @click="goToPromptEdit(feature.id)">
                           <q-item-section avatar>
                             <q-icon name="edit" size="20px" />
                           </q-item-section>
                           <q-item-section>Prompt編集</q-item-section>
                         </q-item>
+                        <q-separator />
                         <q-item clickable v-close-popup @click="deleteFeature(feature.id)">
                           <q-item-section avatar>
                             <q-icon name="delete" size="20px" color="negative" />
@@ -434,6 +484,38 @@ async function deleteFeature(id: number) {
             :loading="creatingFeature"
             :disable="!newFeatureTitle.trim()"
             @click="createFeature"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Feature Edit Dialog -->
+    <q-dialog v-model="showEditFeatureDialog">
+      <q-card style="min-width: 350px">
+        <q-card-section>
+          <div class="text-h6">機能名編集</div>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <q-input
+            v-model="editFeatureTitle"
+            autofocus
+            label="機能タイトル"
+            outlined
+            dense
+            @keyup.enter="saveEditFeature"
+          />
+        </q-card-section>
+
+        <q-card-actions align="right" class="q-px-md q-pb-md">
+          <q-btn flat label="キャンセル" v-close-popup />
+          <q-btn
+            unelevated
+            color="primary"
+            label="保存"
+            :loading="savingFeature"
+            :disable="!editFeatureTitle.trim()"
+            @click="saveEditFeature"
           />
         </q-card-actions>
       </q-card>

@@ -25,6 +25,7 @@ interface User {
   name: string
   email: string
   avatar?: string
+  is_admin?: boolean
 }
 
 interface ChatResponse {

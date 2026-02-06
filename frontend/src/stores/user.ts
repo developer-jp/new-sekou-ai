@@ -8,6 +8,7 @@ export const useUserStore = defineStore('user', () => {
   const error = ref<string | null>(null)
 
   const isLoggedIn = computed(() => !!user.value)
+  const isAdmin = computed(() => user.value?.is_admin === true)
 
   async function login(email: string, password: string) {
     loading.value = true
@@ -98,6 +99,7 @@ export const useUserStore = defineStore('user', () => {
     loading,
     error,
     isLoggedIn,
+    isAdmin,
     login,
     register,
     logout,
