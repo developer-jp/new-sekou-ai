@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
 import { useThemeStore } from '../stores/theme'
+import { api } from '../services/api'
+import type { AiModel } from '../services/api'
 
 const $q = useQuasar()
 const router = useRouter()
@@ -14,15 +16,10 @@ const selectedTheme = ref(themeStore.mode)
 const selectedLanguage = ref('ja')
 const systemPrompt = ref('')
 const loading = ref(false)
+const modelsLoading = ref(false)
 
-// Available AI models (will be fetched from API)
-const aiModels = ref([
-  { id: 1, name: 'GPT-4o', provider: 'openai', description: 'OpenAI最新のフラッグシップモデル' },
-  { id: 2, name: 'GPT-4o Mini', provider: 'openai', description: 'コスト効率の高い軽量モデル' },
-  { id: 3, name: 'Claude 3.5 Sonnet', provider: 'anthropic', description: 'Anthropicの最も賢いモデル' },
-  { id: 4, name: 'Claude 3.5 Haiku', provider: 'anthropic', description: '高速で効率的なモデル' },
-  { id: 5, name: 'Gemini 2.0 Flash', provider: 'google', description: 'Googleの最新高速モデル' },
-])
+// Available AI models (fetched from API)
+const aiModels = ref<AiModel[]>([])
 
 const themeOptions = [
   { value: 'dark', label: 'ダークモード', icon: 'dark_mode' },
@@ -65,6 +62,30 @@ function handleThemeChange(theme: 'light' | 'dark') {
   themeStore.setTheme(theme)
 }
 
+async function loadAiModels() {
+  modelsLoading.value = true
+  try {
+    const response = await api.getAiModels()
+    if (response.success && response.models.length > 0) {
+      aiModels.value = response.models
+      // Set default selected model to first one
+      const firstModel = response.models[0]
+      if (!selectedModel.value && firstModel) {
+        selectedModel.value = String(firstModel.id)
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load AI models:', error)
+    $q.notify({
+      type: 'negative',
+      message: 'AIモデルの読み込みに失敗しました',
+      position: 'top',
+    })
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
 async function saveSettings() {
   loading.value = true
   try {
@@ -92,7 +113,7 @@ function goBack() {
 }
 
 onMounted(() => {
-  selectedModel.value = '1' // Default to first model
+  loadAiModels()
 })
 </script>
 

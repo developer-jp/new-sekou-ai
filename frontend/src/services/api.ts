@@ -27,6 +27,34 @@ interface User {
   avatar?: string
 }
 
+interface ChatResponse {
+  success: boolean
+  message?: string
+  error?: string
+}
+
+interface ChatHistory {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+interface AiModel {
+  id: number
+  name: string
+  provider: string
+  model_id: string
+  description: string | null
+  max_tokens: number
+  context_window: number
+  supports_vision: boolean
+  supports_streaming: boolean
+}
+
+interface AiModelsResponse {
+  success: boolean
+  models: AiModel[]
+}
+
 class ApiService {
   private token: string | null = null
 
@@ -132,7 +160,67 @@ class ApiService {
   async me(): Promise<ApiResponse<User>> {
     return this.request<User>('/me')
   }
+
+  async getAiModels(): Promise<AiModelsResponse> {
+    const url = `${API_BASE_URL}/api/ai-models`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: this.getHeaders(),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        return {
+          success: false,
+          models: [],
+        }
+      }
+
+      return data
+    } catch (error) {
+      return {
+        success: false,
+        models: [],
+      }
+    }
+  }
+
+  async chat(message: string, history: ChatHistory[] = []): Promise<ChatResponse> {
+    const url = `${API_BASE_URL}/api/chat`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ message, history }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error || 'チャットリクエストに失敗しました',
+        }
+      }
+
+      return {
+        success: true,
+        message: data.message,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: 'ネットワークエラーが発生しました',
+      }
+    }
+  }
 }
 
 export const api = new ApiService()
-export type { User, LoginData, RegisterData, ApiResponse }
+export type { User, LoginData, RegisterData, ApiResponse, ChatHistory, ChatResponse, AiModel, AiModelsResponse }
+
+
