@@ -8,12 +8,24 @@ export interface ChatMessage {
   timestamp: Date
 }
 
+export interface ActivePrompt {
+  id: number
+  featureId: number
+  featureTitle: string
+  title: string
+  description: string | null
+  promptContent: string
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const activePrompt = ref<ActivePrompt | null>(null)
+  const isPromptCollapsed = ref(false)
 
   const hasMessages = computed(() => messages.value.length > 0)
+  const hasActivePrompt = computed(() => activePrompt.value !== null)
 
   function addMessage(role: 'user' | 'assistant', content: string) {
     const message: ChatMessage = {
@@ -53,6 +65,25 @@ export const useChatStore = defineStore('chat', () => {
     error.value = null
   }
 
+  function setActivePrompt(prompt: ActivePrompt) {
+    activePrompt.value = prompt
+    isPromptCollapsed.value = false
+  }
+
+  function clearActivePrompt() {
+    activePrompt.value = null
+    isPromptCollapsed.value = false
+  }
+
+  function togglePromptCollapsed() {
+    isPromptCollapsed.value = !isPromptCollapsed.value
+  }
+
+  // Get system prompt for API calls
+  function getSystemPrompt(): string | null {
+    return activePrompt.value?.promptContent || null
+  }
+
   // Get history for API calls (excluding the last user message if it's pending)
   function getHistory(): { role: string; content: string }[] {
     return messages.value.map(m => ({
@@ -65,13 +96,20 @@ export const useChatStore = defineStore('chat', () => {
     messages,
     isLoading,
     error,
+    activePrompt,
+    isPromptCollapsed,
     hasMessages,
+    hasActivePrompt,
     addMessage,
     updateLastAssistantMessage,
     appendToLastAssistantMessage,
     setLoading,
     setError,
     clearMessages,
+    setActivePrompt,
+    clearActivePrompt,
+    togglePromptCollapsed,
+    getSystemPrompt,
     getHistory
   }
 })

@@ -12,6 +12,10 @@ use App\Http\Controllers\FeaturePromptController;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
+// Feature routes - public (read only)
+Route::get('/features', [FeatureController::class, 'index']);
+Route::get('/features/{id}', [FeatureController::class, 'show']);
+
 // 認証が必要なルート
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -20,6 +24,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Chat routes
     Route::post('/chat', [ChatController::class, 'chat']);
     Route::post('/chat/stream', [ChatController::class, 'streamChat']);
+    Route::post('/chat/stream-with-files', [ChatController::class, 'streamChatWithFiles']);
     
     // AI Models routes
     Route::get('/ai-models', [AiModelController::class, 'index']);
@@ -31,10 +36,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/conversations/{id}', [ConversationController::class, 'update']);
     Route::delete('/conversations/{id}', [ConversationController::class, 'destroy']);
 
-    // Feature routes
-    Route::get('/features', [FeatureController::class, 'index']);
+    // Feature routes - protected (write operations, admin only)
     Route::post('/features', [FeatureController::class, 'store']);
-    Route::get('/features/{id}', [FeatureController::class, 'show']);
     Route::put('/features/{id}', [FeatureController::class, 'update']);
     Route::delete('/features/{id}', [FeatureController::class, 'destroy']);
 

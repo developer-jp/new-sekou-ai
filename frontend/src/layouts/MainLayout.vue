@@ -16,6 +16,7 @@ const conversationStore = useConversationStore()
 const chatStore = useChatStore()
 const featureStore = useFeatureStore()
 const leftDrawerOpen = ref(false)
+const rightDrawerOpen = ref(false)
 
 const isDarkMode = computed(() => themeStore.mode === 'dark')
 const isAdmin = computed(() => userStore.isAdmin)
@@ -36,29 +37,29 @@ const editingFeatureId = ref<number | null>(null)
 const editFeatureTitle = ref('')
 const savingFeature = ref(false)
 
+// Right drawer - selected feature prompts
+import type { Feature } from '../services/api'
+const selectedFeature = ref<Feature | null>(null)
+const loadingPrompts = ref(false)
+
 onMounted(async () => {
   await userStore.init()
+  // Load features for everyone (public)
+  await featureStore.loadFeatures()
+  // Load conversations only for logged in users
   if (userStore.isLoggedIn) {
     await conversationStore.loadConversations()
-    await featureStore.loadFeatures()
   }
 })
 
-// Reload data when user logs in
+// Reload conversations when user logs in
 watch(() => userStore.isLoggedIn, async (isLoggedIn) => {
   if (isLoggedIn) {
     await conversationStore.loadConversations()
-    await featureStore.loadFeatures()
   }
 })
 
-// Debug: Log isAdmin value
-watch(() => userStore.user, (user) => {
-  console.log('User updated:', user)
-  console.log('user.is_admin:', user?.is_admin)
-  console.log('userStore.isAdmin:', userStore.isAdmin)
-  console.log('isAdmin computed:', isAdmin.value)
-}, { immediate: true })
+
 
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value
@@ -79,6 +80,7 @@ function handleMenuClick(action: string) {
 
 function startNewChat() {
   chatStore.clearMessages()
+  chatStore.clearActivePrompt()
   conversationStore.clearCurrentConversation()
   router.push('/')
 }
@@ -205,6 +207,61 @@ async function saveEditFeature() {
     savingFeature.value = false
   }
 }
+
+// Select feature and show prompts in right drawer
+async function selectFeature(featureId: number) {
+  loadingPrompts.value = true
+  rightDrawerOpen.value = true
+  
+  try {
+    const feature = await featureStore.loadFeature(featureId)
+    if (feature) {
+      selectedFeature.value = feature
+    }
+  } catch (error) {
+    console.error('Failed to load feature:', error)
+    $q.notify({
+      type: 'negative',
+      message: 'プロンプトの読み込みに失敗しました',
+      position: 'top',
+    })
+  } finally {
+    loadingPrompts.value = false
+  }
+}
+
+function closeRightDrawer() {
+  rightDrawerOpen.value = false
+  selectedFeature.value = null
+}
+
+// Select a prompt and set it as active for chat
+function selectPrompt(prompt: { id: number; title: string; description: string | null; prompt_content: string | null }) {
+  if (!selectedFeature.value || !prompt.prompt_content) return
+  
+  chatStore.setActivePrompt({
+    id: prompt.id,
+    featureId: selectedFeature.value.id,
+    featureTitle: selectedFeature.value.title,
+    title: prompt.title,
+    description: prompt.description,
+    promptContent: prompt.prompt_content,
+  })
+  
+  // Clear current messages to start fresh with the new prompt
+  chatStore.clearMessages()
+  
+  // Close right drawer and navigate to home
+  closeRightDrawer()
+  router.push('/')
+  
+  $q.notify({
+    type: 'positive',
+    message: `「${prompt.title}」を選択しました`,
+    position: 'top',
+    timeout: 1500,
+  })
+}
 </script>
 
 
@@ -300,7 +357,7 @@ async function saveEditFeature() {
           />
 
           <!-- 会话历史列表 -->
-          <div class="conversation-section">
+          <div v-if="userStore.isLoggedIn" class="conversation-section">
             <div class="section-title">履歴</div>
             <q-list v-if="sidebarConversations.length > 0" class="conversation-list">
               <q-item
@@ -382,11 +439,15 @@ async function saveEditFeature() {
               <q-item
                 v-for="feature in features"
                 :key="feature.id"
+                clickable
+                v-ripple
                 class="feature-item"
+                @click="selectFeature(feature.id)"
               >
                 <q-item-section>
-                  <q-item-label class="feature-title" lines="1">
+                  <q-item-label class="feature-title text-ellipsis" lines="1">
                     {{ feature.title }}
+                    <q-tooltip>{{ feature.title }}</q-tooltip>
                   </q-item-label>
                   <q-item-label caption>
                     {{ feature.prompts_count || 0 }} プロンプト
@@ -450,6 +511,63 @@ async function saveEditFeature() {
           <q-item-section>設定</q-item-section>
         </q-item>
       </div>
+    </q-drawer>
+
+    <!-- Right Drawer - Prompts Display -->
+    <q-drawer
+      v-model="rightDrawerOpen"
+      side="right"
+      :width="350"
+      :breakpoint="768"
+      class="right-drawer"
+      overlay
+    >
+      <q-scroll-area class="fit">
+        <div class="drawer-content">
+          <!-- Header -->
+          <div class="drawer-header">
+            <q-btn
+              flat
+              round
+              dense
+              icon="close"
+              @click="closeRightDrawer"
+            />
+            <div class="drawer-title">{{ selectedFeature?.title || 'プロンプト一覧' }}</div>
+          </div>
+
+          <!-- Loading State -->
+          <div v-if="loadingPrompts" class="loading-container">
+            <q-spinner-dots size="40px" color="primary" />
+          </div>
+
+          <!-- Prompts List -->
+          <q-list v-else-if="selectedFeature?.prompts && selectedFeature.prompts.length > 0" class="prompt-list" separator>
+            <q-item
+              v-for="prompt in selectedFeature.prompts"
+              :key="prompt.id"
+              clickable
+              v-ripple
+              class="prompt-item"
+              @click="selectPrompt(prompt)"
+            >
+              <q-item-section>
+                <q-item-label class="prompt-title">
+                  {{ prompt.title }}
+                </q-item-label>
+              </q-item-section>
+              <q-item-section side>
+                <q-icon name="chevron_right" size="20px" color="grey" />
+              </q-item-section>
+            </q-item>
+          </q-list>
+
+          <!-- Empty State -->
+          <div v-else class="no-prompts">
+            プロンプトがありません
+          </div>
+        </div>
+      </q-scroll-area>
     </q-drawer>
 
     <!-- Page Container -->
@@ -695,6 +813,13 @@ async function saveEditFeature() {
 .feature-title
   font-size: 0.875rem
   font-weight: 500
+  max-width: 180px
+
+.text-ellipsis
+  white-space: nowrap
+  overflow: hidden
+  text-overflow: ellipsis
+  display: block
 
 .more-btn
   opacity: 0.5
@@ -726,4 +851,50 @@ async function saveEditFeature() {
     &:hover
       background: var(--bg-hover)
       color: var(--text-primary)
+
+// Right drawer styles
+.right-drawer
+  background: var(--drawer-bg, var(--bg-card-solid))
+
+.drawer-header
+  display: flex
+  align-items: center
+  gap: 8px
+  padding: 12px 16px
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1))
+
+.drawer-title
+  font-size: 1rem
+  font-weight: 600
+  color: var(--text-primary)
+
+.loading-container
+  display: flex
+  justify-content: center
+  align-items: center
+  padding: 40px
+
+.prompt-list
+  padding: 8px
+
+.prompt-item
+  border-radius: 8px
+  margin-bottom: 4px
+  padding: 12px 16px
+  transition: all 0.2s ease
+
+  &:hover
+    background: var(--bg-hover)
+
+.prompt-title
+  font-size: 0.9rem
+  font-weight: 500
+  color: var(--text-primary)
+
+.no-prompts
+  color: var(--text-tertiary)
+  font-size: 0.875rem
+  text-align: center
+  padding: 32px 16px
 </style>
+

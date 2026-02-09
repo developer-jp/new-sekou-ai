@@ -10,6 +10,10 @@ const conversationStore = useConversationStore()
 
 const inputMessage = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
+const uploadedFiles = ref<File[]>([])
+
+const ACCEPTED_FILE_TYPES = '.pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png,.gif,.webp'
 
 const suggestions = [
   { icon: 'edit', text: 'メールを書いて', color: '#8B5CF6' },
@@ -21,15 +25,26 @@ const suggestions = [
 const isLoading = computed(() => chatStore.isLoading)
 const hasMessages = computed(() => chatStore.hasMessages)
 const messages = computed(() => chatStore.messages)
+const activePrompt = computed(() => chatStore.activePrompt)
+const isPromptCollapsed = computed(() => chatStore.isPromptCollapsed)
+const hasActivePrompt = computed(() => chatStore.hasActivePrompt)
 
 async function handleSend() {
   const message = inputMessage.value.trim()
-  if (!message || isLoading.value) return
+  if ((!message && uploadedFiles.value.length === 0) || isLoading.value) return
 
   inputMessage.value = ''
+  const filesToSend = [...uploadedFiles.value]
+  uploadedFiles.value = []
+  
+  // Build display message with file info
+  let displayMessage = message
+  if (filesToSend.length > 0) {
+    displayMessage += '\n\n📎 ' + filesToSend.map(f => f.name).join(', ')
+  }
   
   // Add user message
-  chatStore.addMessage('user', message)
+  chatStore.addMessage('user', displayMessage)
   
   // Prepare history (exclude the message we just added)
   const history: ChatHistory[] = chatStore.messages
@@ -49,19 +64,42 @@ async function handleSend() {
     const token = localStorage.getItem('auth_token')
     const conversationId = conversationStore.currentConversationId
     
-    const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ 
-        message, 
-        history,
-        conversation_id: conversationId 
-      }),
-    })
+    let response: Response
+    
+    if (filesToSend.length > 0) {
+      // Use FormData for file uploads
+      const formData = new FormData()
+      formData.append('message', message || 'ファイルを分析してください')
+      formData.append('history', JSON.stringify(history))
+      if (conversationId) formData.append('conversation_id', String(conversationId))
+      const systemPrompt = chatStore.getSystemPrompt()
+      if (systemPrompt) formData.append('system_prompt', systemPrompt)
+      filesToSend.forEach(file => formData.append('files[]', file))
+      
+      response = await fetch(`${API_BASE_URL}/api/chat/stream-with-files`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'text/event-stream',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      })
+    } else {
+      response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          message, 
+          history,
+          conversation_id: conversationId,
+          system_prompt: chatStore.getSystemPrompt()
+        }),
+      })
+    }
 
     if (!response.ok) {
       throw new Error('Stream request failed')
@@ -152,12 +190,39 @@ function scrollToBottom() {
 }
 
 function formatMessage(content: string): string {
-  // Simple markdown-like formatting
-  return content
+  // Enhanced markdown formatting
+  let formatted = content
+    // Code blocks first (preserve content inside)
     .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
+    // Inline code
     .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+    // Headers (must be at start of line)
+    .replace(/^#### (.+)$/gm, '<h4 class="md-h4">$1</h4>')
+    .replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 class="md-h2">$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1 class="md-h1">$1</h1>')
+    // Horizontal rule
+    .replace(/^---$/gm, '<hr class="md-hr">')
+    // Bold
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    // Ordered list items
+    .replace(/^(\d+)\. (.+)$/gm, '<li class="md-ol-item" data-num="$1">$2</li>')
+    // Unordered list items
+    .replace(/^[-*] (.+)$/gm, '<li class="md-ul-item">$1</li>')
+  
+  // Wrap consecutive list items
+  formatted = formatted
+    .replace(/((?:<li class="md-ol-item"[^>]*>[^<]*<\/li>\s*)+)/g, '<ol class="md-ol">$1</ol>')
+    .replace(/((?:<li class="md-ul-item">[^<]*<\/li>\s*)+)/g, '<ul class="md-ul">$1</ul>')
+  
+  // Convert remaining newlines to <br>, but not after block elements
+  formatted = formatted
+    .replace(/(<\/h[1-4]>|<\/li>|<\/ol>|<\/ul>|<\/pre>|<hr[^>]*>)\n/g, '$1')
     .replace(/\n/g, '<br>')
+  
+  return formatted
 }
 
 const $q = useQuasar()
@@ -177,6 +242,36 @@ function copyToClipboard(content: string) {
       position: 'top',
     })
   })
+}
+
+// File upload handlers
+function handleAttachClick() {
+  fileInput.value?.click()
+}
+
+function handleFileSelected(event: Event) {
+  const target = event.target as HTMLInputElement
+  if (target.files) {
+    const newFiles = Array.from(target.files)
+    uploadedFiles.value = [...uploadedFiles.value, ...newFiles]
+    target.value = '' // Reset to allow selecting same file again
+  }
+}
+
+function removeFile(index: number) {
+  uploadedFiles.value.splice(index, 1)
+}
+
+function getFileIcon(file: File): string {
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  switch (ext) {
+    case 'pdf': return 'picture_as_pdf'
+    case 'docx': case 'doc': return 'description'
+    case 'xlsx': case 'xls': return 'table_chart'
+    case 'pptx': case 'ppt': return 'slideshow'
+    case 'jpg': case 'jpeg': case 'png': case 'gif': case 'webp': return 'image'
+    default: return 'insert_drive_file'
+  }
 }
 </script>
 
@@ -251,6 +346,79 @@ function copyToClipboard(content: string) {
 
       <!-- Input Section -->
       <div class="input-section">
+        <!-- Active Prompt Display -->
+        <div v-if="hasActivePrompt" class="active-prompt-section">
+          <div class="active-prompt-header">
+            <div class="active-prompt-info">
+              <span class="prompt-icon">💡</span>
+              <span v-if="isPromptCollapsed" class="active-prompt-feature">{{ activePrompt?.featureTitle }}</span>
+              <span v-else class="active-prompt-title">{{ activePrompt?.title }}</span>
+            </div>
+            <div class="active-prompt-actions">
+              <q-btn
+                flat
+                round
+                dense
+                size="sm"
+                :icon="isPromptCollapsed ? 'expand_more' : 'expand_less'"
+                @click="chatStore.togglePromptCollapsed()"
+              >
+                <q-tooltip>{{ isPromptCollapsed ? '利用説明を表示' : '簡略化' }}</q-tooltip>
+              </q-btn>
+              <q-btn
+                flat
+                round
+                dense
+                size="sm"
+                icon="close"
+                @click="chatStore.clearActivePrompt()"
+              >
+                <q-tooltip>プロンプトを解除</q-tooltip>
+              </q-btn>
+            </div>
+          </div>
+          <div v-if="!isPromptCollapsed && activePrompt?.description" class="active-prompt-content">
+            <div class="usage-label">
+              <q-icon name="info" size="14px" color="grey" />
+              <span>利用説明</span>
+            </div>
+            <div class="active-prompt-description">
+              {{ activePrompt.description }}
+            </div>
+          </div>
+        </div>
+        
+        <!-- File Preview Section -->
+        <div v-if="uploadedFiles.length > 0" class="file-preview-section">
+          <div
+            v-for="(file, index) in uploadedFiles"
+            :key="index"
+            class="file-chip"
+          >
+            <q-icon :name="getFileIcon(file)" size="16px" />
+            <span class="file-name">{{ file.name }}</span>
+            <q-btn
+              flat
+              round
+              dense
+              size="xs"
+              icon="close"
+              class="remove-file-btn"
+              @click="removeFile(index)"
+            />
+          </div>
+        </div>
+        
+        <!-- Hidden File Input -->
+        <input
+          ref="fileInput"
+          type="file"
+          :accept="ACCEPTED_FILE_TYPES"
+          multiple
+          hidden
+          @change="handleFileSelected"
+        />
+        
         <div class="input-wrapper">
           <q-input
             v-model="inputMessage"
@@ -273,7 +441,10 @@ function copyToClipboard(content: string) {
                 icon="attach_file"
                 class="action-btn"
                 :disable="isLoading"
-              />
+                @click="handleAttachClick"
+              >
+                <q-tooltip>ファイルを添付 (PDF, Word, Excel, 画像)</q-tooltip>
+              </q-btn>
               <q-btn
                 flat
                 round
@@ -288,7 +459,7 @@ function copyToClipboard(content: string) {
                 icon="send"
                 color="primary"
                 class="send-btn"
-                :disable="!inputMessage.trim() || isLoading"
+                :disable="(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading"
                 :loading="isLoading"
                 @click="handleSend"
               />
@@ -476,6 +647,56 @@ function copyToClipboard(content: string) {
     font-family: 'Fira Code', monospace
     font-size: 0.9rem
 
+  // Markdown headers
+  :deep(.md-h1)
+    font-size: 1.5rem
+    font-weight: 700
+    margin: 16px 0 8px 0
+    color: var(--text-primary)
+    border-bottom: 1px solid var(--border-color)
+    padding-bottom: 4px
+
+  :deep(.md-h2)
+    font-size: 1.3rem
+    font-weight: 600
+    margin: 14px 0 6px 0
+    color: var(--text-primary)
+
+  :deep(.md-h3)
+    font-size: 1.1rem
+    font-weight: 600
+    margin: 12px 0 4px 0
+    color: var(--text-primary)
+
+  :deep(.md-h4)
+    font-size: 1rem
+    font-weight: 600
+    margin: 10px 0 4px 0
+    color: var(--text-secondary)
+
+  // Markdown lists
+  :deep(.md-ol),
+  :deep(.md-ul)
+    margin: 8px 0
+    padding-left: 24px
+
+  :deep(.md-ol-item),
+  :deep(.md-ul-item)
+    margin: 4px 0
+    line-height: 1.6
+
+  :deep(.md-ul)
+    list-style-type: disc
+
+  :deep(.md-ol)
+    list-style-type: decimal
+
+  // Horizontal rule
+  :deep(.md-hr)
+    border: none
+    border-top: 1px solid var(--border-color)
+    margin: 16px 0
+
 .message-loading
   padding: 8px 0
 
@@ -527,4 +748,92 @@ function copyToClipboard(content: string) {
   color: var(--text-muted)
   font-size: 0.75rem
   margin-top: 16px
+
+// Active Prompt Section
+.active-prompt-section
+  background: var(--bg-input)
+  border: 1px solid var(--border-color)
+  border-radius: 16px
+  padding: 12px 16px
+  margin-bottom: 12px
+
+.active-prompt-header
+  display: flex
+  justify-content: space-between
+  align-items: center
+
+.active-prompt-info
+  display: flex
+  align-items: center
+  gap: 8px
+
+.active-prompt-feature
+  font-size: 0.875rem
+  font-weight: 600
+  color: var(--text-primary)
+
+.active-prompt-title
+  font-size: 0.875rem
+  font-weight: 500
+  color: var(--text-primary)
+
+.active-prompt-actions
+  display: flex
+  gap: 4px
+
+.active-prompt-content
+  margin-top: 12px
+  padding-top: 12px
+  border-top: 1px solid var(--border-color)
+
+.prompt-icon
+  font-size: 18px
+
+.usage-label
+  display: flex
+  align-items: center
+  gap: 4px
+  font-size: 0.75rem
+  color: var(--text-tertiary)
+  margin-bottom: 6px
+
+.active-prompt-description
+  font-size: 0.85rem
+  color: var(--text-secondary)
+  line-height: 1.5
+  background: var(--bg-card)
+  padding: 10px 12px
+  border-radius: 8px
+
+// File Upload Preview
+.file-preview-section
+  display: flex
+  flex-wrap: wrap
+  gap: 8px
+  margin-bottom: 12px
+
+.file-chip
+  display: flex
+  align-items: center
+  gap: 6px
+  background: var(--bg-input)
+  border: 1px solid var(--border-color)
+  border-radius: 20px
+  padding: 6px 8px 6px 12px
+  font-size: 0.8rem
+  color: var(--text-secondary)
+  max-width: 200px
+
+.file-name
+  white-space: nowrap
+  overflow: hidden
+  text-overflow: ellipsis
+  flex: 1
+
+.remove-file-btn
+  color: var(--text-tertiary)
+  &:hover
+    color: var(--text-primary)
 </style>
+
+

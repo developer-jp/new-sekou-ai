@@ -9,12 +9,11 @@ use Illuminate\Http\JsonResponse;
 class FeatureController extends Controller
 {
     /**
-     * Get all features for the authenticated user.
+     * Get all features (public endpoint).
      */
-    public function index(Request $request): JsonResponse
+    public function index(): JsonResponse
     {
-        $features = Feature::where('user_id', $request->user()->id)
-            ->withCount('prompts')
+        $features = Feature::withCount('prompts')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -45,13 +44,11 @@ class FeatureController extends Controller
     }
 
     /**
-     * Get a specific feature with its prompts.
+     * Get a specific feature with its prompts (public endpoint).
      */
-    public function show(Request $request, int $id): JsonResponse
+    public function show(int $id): JsonResponse
     {
-        $feature = Feature::where('user_id', $request->user()->id)
-            ->with('prompts')
-            ->find($id);
+        $feature = Feature::with('prompts')->find($id);
 
         if (!$feature) {
             return response()->json([
