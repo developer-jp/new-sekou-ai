@@ -33,6 +33,16 @@ const messages = computed(() => chatStore.messages)
 const activePrompt = computed(() => chatStore.activePrompt)
 const isPromptCollapsed = computed(() => chatStore.isPromptCollapsed)
 const hasActivePrompt = computed(() => chatStore.hasActivePrompt)
+const useGrounding = computed(() => chatStore.useGrounding)
+
+function getFaviconUrl(uri: string): string {
+  try {
+    const domain = new URL(uri).hostname
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=16`
+  } catch {
+    return ''
+  }
+}
 
 async function handleSend() {
   if (!isLoggedIn.value) return
@@ -80,6 +90,7 @@ async function handleSend() {
       if (conversationId) formData.append('conversation_id', String(conversationId))
       const systemPrompt = chatStore.getSystemPrompt()
       if (systemPrompt) formData.append('system_prompt', systemPrompt)
+      if (chatStore.useGrounding) formData.append('use_grounding', '1')
       filesToSend.forEach(file => formData.append('files[]', file))
       
       response = await fetch(`${API_BASE_URL}/api/chat/stream-with-files`, {
@@ -98,11 +109,12 @@ async function handleSend() {
           'Accept': 'text/event-stream',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ 
-          message, 
+        body: JSON.stringify({
+          message,
           history,
           conversation_id: conversationId,
-          system_prompt: chatStore.getSystemPrompt()
+          system_prompt: chatStore.getSystemPrompt(),
+          use_grounding: chatStore.useGrounding
         }),
       })
     }
@@ -143,6 +155,10 @@ async function handleSend() {
               if (parsed.content) {
                 accumulatedContent += parsed.content
                 chatStore.updateLastAssistantMessage(accumulatedContent)
+                await nextTick()
+                scrollToBottom()
+              } else if (parsed.grounding) {
+                chatStore.updateLastAssistantGrounding(parsed.grounding.sources, parsed.grounding.search_queries)
                 await nextTick()
                 scrollToBottom()
               } else if (parsed.error) {
@@ -346,6 +362,44 @@ function getFileIcon(file: File): string {
                 <q-tooltip>コピー</q-tooltip>
               </q-btn>
             </div>
+            <!-- Grounding metadata -->
+            <div v-if="message.groundingSources?.length || message.searchQueries?.length" class="grounding-section">
+              <!-- Search queries -->
+              <div v-if="message.searchQueries?.length" class="grounding-queries">
+                <div class="grounding-label">
+                  <q-icon name="search" size="14px" />
+                  検索キーワード
+                </div>
+                <div class="query-chips">
+                  <span
+                    v-for="(query, idx) in message.searchQueries"
+                    :key="idx"
+                    class="query-chip"
+                  >{{ query }}</span>
+                </div>
+              </div>
+              <!-- Sources -->
+              <div v-if="message.groundingSources?.length" class="grounding-sources">
+                <div class="grounding-label">
+                  <q-icon name="language" size="14px" />
+                  検索ソース
+                </div>
+                <div class="grounding-chips">
+                  <a
+                    v-for="(source, idx) in message.groundingSources"
+                    :key="idx"
+                    :href="source.uri"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="grounding-chip"
+                  >
+                    <img :src="getFaviconUrl(source.uri)" class="grounding-favicon" alt="" />
+                    <span>{{ source.title }}</span>
+                    <q-icon name="open_in_new" size="12px" />
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -468,6 +522,19 @@ function getFileIcon(file: File): string {
                   @click="handleAttachClick"
                 >
                   <q-tooltip>ファイルを添付 (PDF, Word, Excel, 画像)</q-tooltip>
+                </q-btn>
+                <q-btn
+                  :flat="!useGrounding"
+                  :unelevated="useGrounding"
+                  round
+                  dense
+                  icon="travel_explore"
+                  class="action-btn"
+                  :class="{ 'grounding-active': useGrounding }"
+                  :disable="isLoading"
+                  @click="chatStore.toggleGrounding()"
+                >
+                  <q-tooltip>{{ useGrounding ? '実時間検索 ON' : '実時間検索' }}</q-tooltip>
                 </q-btn>
                 <q-btn
                   flat
@@ -889,6 +956,81 @@ function getFileIcon(file: File): string {
   color: var(--text-tertiary)
   &:hover
     color: var(--text-primary)
+
+// Grounding toggle
+.grounding-active
+  background: linear-gradient(135deg, #3B82F6, #6366F1) !important
+  color: white !important
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35)
+
+// Grounding section
+.grounding-section
+  margin-top: 12px
+  padding-top: 10px
+  border-top: 1px solid var(--border-color)
+  display: flex
+  flex-direction: column
+  gap: 10px
+
+.grounding-label
+  display: flex
+  align-items: center
+  gap: 6px
+  font-size: 0.75rem
+  font-weight: 600
+  color: var(--text-tertiary)
+  margin-bottom: 6px
+
+// Search queries
+.query-chips
+  display: flex
+  flex-wrap: wrap
+  gap: 6px
+
+.query-chip
+  display: inline-flex
+  align-items: center
+  padding: 3px 10px
+  background: rgba(59, 130, 246, 0.08)
+  border: 1px solid rgba(59, 130, 246, 0.2)
+  border-radius: 12px
+  font-size: 0.75rem
+  color: #3B82F6
+
+// Grounding sources
+.grounding-chips
+  display: flex
+  flex-wrap: wrap
+  gap: 6px
+
+.grounding-chip
+  display: inline-flex
+  align-items: center
+  gap: 6px
+  padding: 4px 10px
+  background: var(--bg-input)
+  border: 1px solid var(--border-color)
+  border-radius: 16px
+  font-size: 0.75rem
+  color: var(--text-secondary)
+  text-decoration: none
+  transition: all 0.2s ease
+  max-width: 280px
+
+  &:hover
+    background: var(--bg-hover)
+    border-color: var(--border-focus)
+    color: var(--text-primary)
+
+  span
+    white-space: nowrap
+    overflow: hidden
+    text-overflow: ellipsis
+
+.grounding-favicon
+  width: 14px
+  height: 14px
+  flex-shrink: 0
 </style>
 
 

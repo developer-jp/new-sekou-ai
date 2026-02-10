@@ -33,7 +33,7 @@ async function selectConversation(id: number) {
   const messages = await conversationStore.loadConversation(id)
   chatStore.clearMessages()
   messages.forEach(m => {
-    chatStore.addMessage(m.role, m.content)
+    chatStore.addMessage(m.role, m.content, m.metadata?.grounding_sources, m.metadata?.search_queries)
   })
   router.push('/')
 }

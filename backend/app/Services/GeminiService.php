@@ -6,6 +6,8 @@ use Gemini;
 use Gemini\Client;
 use Gemini\Data\Blob;
 use Gemini\Data\Content;
+use Gemini\Data\GoogleSearch;
+use Gemini\Data\Tool;
 use Gemini\Enums\MimeType;
 use Gemini\Enums\Role;
 use Illuminate\Support\Facades\Log;
@@ -51,36 +53,42 @@ class GeminiService
     /**
      * Generate content with streaming
      */
-    public function streamContent(string $message, array $history = [], ?string $systemPrompt = null): \Generator
+    public function streamContent(string $message, array $history = [], ?string $systemPrompt = null, bool $useGrounding = false): \Generator
     {
         try {
             $chatHistory = $this->buildHistory($history, $systemPrompt);
-            $chat = $this->client->generativeModel($this->model)->startChat(
-                history: $chatHistory
-            );
+            $model = $this->client->generativeModel($this->model);
 
+            if ($useGrounding) {
+                $model = $model->withTool(new Tool(googleSearch: new GoogleSearch()));
+            }
+
+            $chat = $model->startChat(history: $chatHistory);
             $stream = $chat->streamSendMessage($message);
+            $groundingResult = [];
 
             foreach ($stream as $response) {
-                yield $response->text();
+                yield ['text' => $response->text()];
+                $groundingResult = $this->extractGroundingMetadata($response, $groundingResult);
+            }
+
+            if (!empty($groundingResult)) {
+                yield ['grounding' => $groundingResult];
             }
         } catch (\Exception $e) {
             Log::error('Gemini streaming error', ['error' => $e->getMessage()]);
-            yield 'エラーが発生しました: ' . $e->getMessage();
+            yield ['text' => 'エラーが発生しました: ' . $e->getMessage()];
         }
     }
 
     /**
      * Generate content with files (images and text) - streaming
      */
-    public function streamContentWithFiles(string $message, array $files = [], array $history = [], ?string $systemPrompt = null): \Generator
+    public function streamContentWithFiles(string $message, array $files = [], array $history = [], ?string $systemPrompt = null, bool $useGrounding = false): \Generator
     {
         try {
             $chatHistory = $this->buildHistory($history, $systemPrompt);
-            
-            // Build parts array with text and images
-            $parts = [];
-            
+
             // Add text files content to message
             $textContent = $message;
             foreach ($files as $file) {
@@ -88,7 +96,7 @@ class GeminiService
                     $textContent .= "\n\n【ファイル: {$file['filename']}】\n{$file['content']}";
                 }
             }
-            
+
             // Add images as blobs
             $imageBlobs = [];
             foreach ($files as $file) {
@@ -100,39 +108,80 @@ class GeminiService
                     );
                 }
             }
-            
-            $chat = $this->client->generativeModel($this->model)->startChat(
-                history: $chatHistory
-            );
-            
-            // If we have images, send with generateContent for multimodal
+
+            $model = $this->client->generativeModel($this->model);
+
+            if ($useGrounding) {
+                $model = $model->withTool(new Tool(googleSearch: new GoogleSearch()));
+            }
+
+            $groundingResult = [];
+
             if (!empty($imageBlobs)) {
-                // For multimodal, we need to use generateContent with blobs
-                $model = $this->client->generativeModel($this->model);
-                
-                // Build content parts
                 $contentParts = [$textContent];
                 foreach ($imageBlobs as $blob) {
                     $contentParts[] = $blob;
                 }
-                
+
                 $stream = $model->streamGenerateContent(...$contentParts);
-                
+
                 foreach ($stream as $response) {
-                    yield $response->text();
+                    yield ['text' => $response->text()];
+                    $groundingResult = $this->extractGroundingMetadata($response, $groundingResult);
                 }
             } else {
-                // Text only - use chat
+                $chat = $model->startChat(history: $chatHistory);
                 $stream = $chat->streamSendMessage($textContent);
-                
+
                 foreach ($stream as $response) {
-                    yield $response->text();
+                    yield ['text' => $response->text()];
+                    $groundingResult = $this->extractGroundingMetadata($response, $groundingResult);
                 }
+            }
+
+            if (!empty($groundingResult)) {
+                yield ['grounding' => $groundingResult];
             }
         } catch (\Exception $e) {
             Log::error('Gemini multimodal streaming error', ['error' => $e->getMessage()]);
-            yield 'エラーが発生しました: ' . $e->getMessage();
+            yield ['text' => 'エラーが発生しました: ' . $e->getMessage()];
         }
+    }
+
+    /**
+     * Extract grounding metadata from a streaming response chunk
+     */
+    private function extractGroundingMetadata($response, array $current): array
+    {
+        if (empty($response->candidates) || !$response->candidates[0]->groundingMetadata) {
+            return $current;
+        }
+
+        $metadata = $response->candidates[0]->groundingMetadata;
+        $result = [];
+
+        // Extract sources from grounding chunks
+        if (!empty($metadata->groundingChunks)) {
+            $sources = [];
+            foreach ($metadata->groundingChunks as $chunk) {
+                if ($chunk->web) {
+                    $sources[] = [
+                        'title' => $chunk->web->title ?? '',
+                        'uri' => $chunk->web->uri ?? '',
+                    ];
+                }
+            }
+            if (!empty($sources)) {
+                $result['sources'] = $sources;
+            }
+        }
+
+        // Extract web search queries
+        if (!empty($metadata->webSearchQueries)) {
+            $result['search_queries'] = $metadata->webSearchQueries;
+        }
+
+        return !empty($result) ? $result : $current;
     }
 
     /**

@@ -33,7 +33,7 @@ class ConversationController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $conversation = Conversation::forUser($request->user()->id)
-            ->with(['messages:id,conversation_id,role,content,created_at'])
+            ->with(['messages:id,conversation_id,role,content,metadata,created_at'])
             ->findOrFail($id);
 
         return response()->json([

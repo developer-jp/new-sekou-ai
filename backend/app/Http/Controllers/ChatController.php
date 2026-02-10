@@ -81,6 +81,7 @@ class ChatController extends Controller
             'conversation_id' => 'nullable|exists:conversations,id',
             'history' => 'array',
             'system_prompt' => 'nullable|string|max:10000',
+            'use_grounding' => 'nullable|boolean',
         ]);
 
         $user = $request->user();
@@ -88,6 +89,7 @@ class ChatController extends Controller
         $history = $request->input('history', []);
         $conversationId = $request->input('conversation_id');
         $systemPrompt = $request->input('system_prompt');
+        $useGrounding = (bool) $request->input('use_grounding', false);
 
         // Get or create conversation
         $conversation = $this->getOrCreateConversation($user, $conversationId, $message);
@@ -99,7 +101,7 @@ class ChatController extends Controller
             'content' => $message,
         ]);
 
-        return response()->stream(function () use ($message, $history, $conversation, $systemPrompt) {
+        return response()->stream(function () use ($message, $history, $conversation, $systemPrompt, $useGrounding) {
             header('Content-Type: text/event-stream');
             header('Cache-Control: no-cache');
             header('Connection: keep-alive');
@@ -111,20 +113,39 @@ class ChatController extends Controller
             flush();
 
             $fullContent = '';
+            $groundingData = null;
 
             try {
-                foreach ($this->geminiService->streamContent($message, $history, $systemPrompt) as $chunk) {
-                    $fullContent .= $chunk;
-                    echo "data: " . json_encode(['content' => $chunk]) . "\n\n";
-                    ob_flush();
-                    flush();
+                foreach ($this->geminiService->streamContent($message, $history, $systemPrompt, $useGrounding) as $data) {
+                    if (isset($data['text'])) {
+                        $fullContent .= $data['text'];
+                        echo "data: " . json_encode(['content' => $data['text']]) . "\n\n";
+                        ob_flush();
+                        flush();
+                    } elseif (isset($data['grounding'])) {
+                        $groundingData = $data['grounding'];
+                        echo "data: " . json_encode(['grounding' => $groundingData]) . "\n\n";
+                        ob_flush();
+                        flush();
+                    }
                 }
 
                 // Save assistant message after streaming completes
+                $metadata = null;
+                if ($groundingData) {
+                    $metadata = [];
+                    if (!empty($groundingData['sources'])) {
+                        $metadata['grounding_sources'] = $groundingData['sources'];
+                    }
+                    if (!empty($groundingData['search_queries'])) {
+                        $metadata['search_queries'] = $groundingData['search_queries'];
+                    }
+                }
                 Message::create([
                     'conversation_id' => $conversation->id,
                     'role' => 'assistant',
                     'content' => $fullContent,
+                    'metadata' => $metadata,
                 ]);
 
                 // Update conversation last_message_at
@@ -156,6 +177,7 @@ class ChatController extends Controller
             'conversation_id' => 'nullable',
             'history' => 'nullable|string', // JSON string for multipart
             'system_prompt' => 'nullable|string|max:10000',
+            'use_grounding' => 'nullable',
             'files.*' => 'file|max:10240', // 10MB max per file
         ]);
 
@@ -164,6 +186,7 @@ class ChatController extends Controller
         $history = json_decode($request->input('history', '[]'), true) ?: [];
         $conversationId = $request->input('conversation_id') ? (int) $request->input('conversation_id') : null;
         $systemPrompt = $request->input('system_prompt');
+        $useGrounding = filter_var($request->input('use_grounding', false), FILTER_VALIDATE_BOOLEAN);
         $uploadedFiles = $request->file('files', []);
 
         // Process uploaded files
@@ -196,7 +219,7 @@ class ChatController extends Controller
             'content' => $messageContent,
         ]);
 
-        return response()->stream(function () use ($message, $processedFiles, $history, $conversation, $systemPrompt) {
+        return response()->stream(function () use ($message, $processedFiles, $history, $conversation, $systemPrompt, $useGrounding) {
             header('Content-Type: text/event-stream');
             header('Cache-Control: no-cache');
             header('Connection: keep-alive');
@@ -208,20 +231,39 @@ class ChatController extends Controller
             flush();
 
             $fullContent = '';
+            $groundingData = null;
 
             try {
-                foreach ($this->geminiService->streamContentWithFiles($message, $processedFiles, $history, $systemPrompt) as $chunk) {
-                    $fullContent .= $chunk;
-                    echo "data: " . json_encode(['content' => $chunk]) . "\n\n";
-                    ob_flush();
-                    flush();
+                foreach ($this->geminiService->streamContentWithFiles($message, $processedFiles, $history, $systemPrompt, $useGrounding) as $data) {
+                    if (isset($data['text'])) {
+                        $fullContent .= $data['text'];
+                        echo "data: " . json_encode(['content' => $data['text']]) . "\n\n";
+                        ob_flush();
+                        flush();
+                    } elseif (isset($data['grounding'])) {
+                        $groundingData = $data['grounding'];
+                        echo "data: " . json_encode(['grounding' => $groundingData]) . "\n\n";
+                        ob_flush();
+                        flush();
+                    }
                 }
 
                 // Save assistant message after streaming completes
+                $metadata = null;
+                if ($groundingData) {
+                    $metadata = [];
+                    if (!empty($groundingData['sources'])) {
+                        $metadata['grounding_sources'] = $groundingData['sources'];
+                    }
+                    if (!empty($groundingData['search_queries'])) {
+                        $metadata['search_queries'] = $groundingData['search_queries'];
+                    }
+                }
                 Message::create([
                     'conversation_id' => $conversation->id,
                     'role' => 'assistant',
                     'content' => $fullContent,
+                    'metadata' => $metadata,
                 ]);
 
                 // Update conversation last_message_at

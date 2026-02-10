@@ -18,12 +18,12 @@ const chatStore = useChatStore()
 const featureStore = useFeatureStore()
 const leftDrawerOpen = ref(false)
 const rightDrawerOpen = ref(false)
+const historyExpanded = ref(true)
 
 const isDarkMode = computed(() => themeStore.mode === 'dark')
 const isAdmin = computed(() => userStore.isAdmin)
 const conversations = computed(() => conversationStore.conversations)
 const sidebarConversations = computed(() => conversations.value.slice(0, 5))
-const hasMoreConversations = computed(() => conversations.value.length > 5)
 const currentConversationId = computed(() => conversationStore.currentConversationId)
 const features = computed(() => featureStore.features)
 
@@ -367,64 +367,61 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
 
           <!-- 会话历史列表 -->
           <div v-if="userStore.isLoggedIn" class="conversation-section">
-            <div class="section-title">履歴</div>
-            <q-list v-if="sidebarConversations.length > 0" class="conversation-list">
-              <q-item
-                v-for="conv in sidebarConversations"
-                :key="conv.id"
-                clickable
-                v-ripple
-                class="conversation-item"
-                :class="{ active: conv.id === currentConversationId }"
-                @click="selectConversation(conv.id)"
-              >
-                <q-item-section avatar class="conv-icon-section">
-                  <q-icon name="chat_bubble_outline" size="18px" />
-                </q-item-section>
-                <q-item-section class="conv-text-section">
-                  <q-item-label class="conversation-title" lines="1">
-                    {{ conv.title || '新しいチャット' }}
-                  </q-item-label>
-                  <q-item-label caption class="conv-date">
-                    {{ formatDate(conv.last_message_at) }}
-                  </q-item-label>
-                </q-item-section>
-                <q-item-section side>
-                  <q-btn
-                    flat
-                    round
-                    dense
-                    size="sm"
-                    icon="delete_outline"
-                    class="delete-btn"
-                    @click="deleteConversation(conv.id, $event)"
-                  >
-                    <q-tooltip>削除</q-tooltip>
-                  </q-btn>
-                </q-item-section>
-              </q-item>
-            </q-list>
-            <!-- View All Link -->
-            <q-item
-              v-if="hasMoreConversations || sidebarConversations.length > 0"
-              clickable
-              v-ripple
-              class="view-all-item"
-              @click="$router.push('/history')"
-            >
-              <q-item-section avatar>
-                <q-icon name="history" size="20px" />
-              </q-item-section>
-              <q-item-section>
-                {{ hasMoreConversations ? 'すべての履歴を表示' : '履歴を管理' }}
-              </q-item-section>
-              <q-item-section side>
-                <q-icon name="chevron_right" size="20px" />
-              </q-item-section>
-            </q-item>
-            <div v-if="sidebarConversations.length === 0" class="no-conversations">
-              履歴がありません
+            <div class="section-header">
+              <div class="section-title section-title-clickable" @click="$router.push('/history')">
+                履歴
+              </div>
+              <q-btn
+                flat
+                round
+                dense
+                size="sm"
+                :icon="historyExpanded ? 'expand_less' : 'expand_more'"
+                class="collapse-btn"
+                @click="historyExpanded = !historyExpanded"
+              />
             </div>
+            <template v-if="historyExpanded">
+              <q-list v-if="sidebarConversations.length > 0" class="conversation-list">
+                <q-item
+                  v-for="conv in sidebarConversations"
+                  :key="conv.id"
+                  clickable
+                  v-ripple
+                  class="conversation-item"
+                  :class="{ active: conv.id === currentConversationId }"
+                  @click="selectConversation(conv.id)"
+                >
+                  <q-item-section avatar class="conv-icon-section">
+                    <q-icon name="chat_bubble_outline" size="18px" />
+                  </q-item-section>
+                  <q-item-section class="conv-text-section">
+                    <q-item-label class="conversation-title" lines="1">
+                      {{ conv.title || '新しいチャット' }}
+                    </q-item-label>
+                    <q-item-label caption class="conv-date">
+                      {{ formatDate(conv.last_message_at) }}
+                    </q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-btn
+                      flat
+                      round
+                      dense
+                      size="sm"
+                      icon="delete_outline"
+                      class="delete-btn"
+                      @click="deleteConversation(conv.id, $event)"
+                    >
+                      <q-tooltip>削除</q-tooltip>
+                    </q-btn>
+                  </q-item-section>
+                </q-item>
+              </q-list>
+              <div v-else class="no-conversations">
+                履歴がありません
+              </div>
+            </template>
           </div>
 
           <!-- 機能リスト -->
@@ -791,6 +788,18 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
   padding: 0 8px
   margin-bottom: 4px
 
+.section-title-clickable
+  cursor: pointer
+  transition: color 0.2s ease
+  &:hover
+    color: var(--accent-primary)
+
+.collapse-btn
+  color: var(--text-tertiary)
+  transition: color 0.2s ease
+  &:hover
+    color: var(--text-primary)
+
 .conversation-list
   padding: 0
 
@@ -843,18 +852,6 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
   font-size: 0.8rem
   text-align: center
   padding: 16px 12px
-
-.view-all-item
-  border-radius: 8px
-  margin-top: 4px
-  color: var(--accent-primary)
-  font-size: 0.8rem
-  min-height: 36px
-  padding: 4px 10px
-  transition: all 0.2s ease
-
-  &:hover
-    background: var(--bg-hover)
 
 // Feature section styles
 .feature-section

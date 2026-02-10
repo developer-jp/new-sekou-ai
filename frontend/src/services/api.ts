@@ -430,6 +430,10 @@ interface ConversationMessage {
   conversation_id: number
   role: 'user' | 'assistant'
   content: string
+  metadata?: {
+    grounding_sources?: { title: string; uri: string }[]
+    search_queries?: string[]
+  } | null
   created_at: string
 }
 

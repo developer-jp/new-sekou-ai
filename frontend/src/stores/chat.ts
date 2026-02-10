@@ -1,11 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+export interface GroundingSource {
+  title: string
+  uri: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  groundingSources?: GroundingSource[]
+  searchQueries?: string[]
 }
 
 export interface ActivePrompt {
@@ -23,16 +30,19 @@ export const useChatStore = defineStore('chat', () => {
   const error = ref<string | null>(null)
   const activePrompt = ref<ActivePrompt | null>(null)
   const isPromptCollapsed = ref(false)
+  const useGrounding = ref(false)
 
   const hasMessages = computed(() => messages.value.length > 0)
   const hasActivePrompt = computed(() => activePrompt.value !== null)
 
-  function addMessage(role: 'user' | 'assistant', content: string) {
+  function addMessage(role: 'user' | 'assistant', content: string, groundingSources?: GroundingSource[], searchQueries?: string[]) {
     const message: ChatMessage = {
       id: crypto.randomUUID(),
       role,
       content,
-      timestamp: new Date()
+      timestamp: new Date(),
+      groundingSources,
+      searchQueries
     }
     messages.value.push(message)
     return message
@@ -50,6 +60,24 @@ export const useChatStore = defineStore('chat', () => {
     if (lastMessage && lastMessage.role === 'assistant') {
       lastMessage.content += chunk
     }
+  }
+
+  function updateLastAssistantGrounding(sources: GroundingSource[], searchQueries?: string[]) {
+    const lastMessage = messages.value[messages.value.length - 1]
+    if (lastMessage && lastMessage.role === 'assistant') {
+      lastMessage.groundingSources = sources
+      if (searchQueries) {
+        lastMessage.searchQueries = searchQueries
+      }
+    }
+  }
+
+  function toggleGrounding() {
+    useGrounding.value = !useGrounding.value
+  }
+
+  function setGrounding(val: boolean) {
+    useGrounding.value = val
   }
 
   function setLoading(loading: boolean) {
@@ -98,17 +126,21 @@ export const useChatStore = defineStore('chat', () => {
     error,
     activePrompt,
     isPromptCollapsed,
+    useGrounding,
     hasMessages,
     hasActivePrompt,
     addMessage,
     updateLastAssistantMessage,
     appendToLastAssistantMessage,
+    updateLastAssistantGrounding,
     setLoading,
     setError,
     clearMessages,
     setActivePrompt,
     clearActivePrompt,
     togglePromptCollapsed,
+    toggleGrounding,
+    setGrounding,
     getSystemPrompt,
     getHistory
   }
