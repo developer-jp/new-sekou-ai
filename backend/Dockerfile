@@ -1,6 +1,6 @@
-# Use the official PHP 8.2 image.
+# Use the official PHP 8.3 image.
 # https://hub.docker.com/_/php
-FROM php:8.2-apache
+FROM php:8.3-apache
 
 # Set the working directory inside the container based on the environment variable
 WORKDIR /var/www
