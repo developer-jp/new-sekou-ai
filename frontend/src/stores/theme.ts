@@ -6,7 +6,7 @@ export type ThemeMode = 'light' | 'dark'
 export const useThemeStore = defineStore('theme', () => {
   // Initialize from localStorage or default to 'dark'
   const savedTheme = localStorage.getItem('theme') as ThemeMode | null
-  const mode = ref<ThemeMode>(savedTheme || 'dark')
+  const mode = ref<ThemeMode>(savedTheme || 'light')
 
   // Watch for changes and persist to localStorage
   watch(mode, (newMode) => {
