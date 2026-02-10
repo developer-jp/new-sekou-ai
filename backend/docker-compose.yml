@@ -1,0 +1,18 @@
+services:
+  # コンテナ名。
+  # 外から見るとプレフィックスがついた名前になりますが、同一docker-compose内のコンテナからは`api`として認識されます
+  sekou-ai:
+    build: ./
+    volumes:
+      - ./:/var/www/sekou-ai
+      - ./docker/apache/000-default.conf:/etc/apache2/sites-available/000-default.conf
+    user: www-data
+    environment:
+      TZ: Asia/Tokyo
+      LANG: C.UTF-8
+      LOG_LEVEL: debug
+    working_dir: /var/www
+    command: ["apache2-foreground"]
+    restart: always
+    ports:
+      - 80:80
