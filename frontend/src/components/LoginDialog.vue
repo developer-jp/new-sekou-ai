@@ -74,7 +74,9 @@ async function handleSubmit() {
     if (err.errors) {
       const firstError = Object.values(err.errors)[0]
       if (firstError) {
-        errorMessage.value = Array.isArray(firstError) ? firstError[0] : String(firstError)
+        errorMessage.value = Array.isArray(firstError)
+          ? (firstError[0] ?? 'エラーが発生しました')
+          : String(firstError)
       } else {
         errorMessage.value = 'エラーが発生しました'
       }
