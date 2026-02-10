@@ -279,8 +279,11 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
           @click="toggleLeftDrawer"
         />
 
-        <q-toolbar-title class="logo-title">
+        <div class="logo-container q-ml-sm">
+          <img src="../assets/logo_WQAZA.png" alt="SekouAI Logo" class="header-logo" />
+        </div>
 
+        <q-toolbar-title class="absolute-center logo-title">
           <span class="logo-text">SekouAI</span>
         </q-toolbar-title>
 
@@ -659,6 +662,15 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
   &:hover
     color: var(--text-primary)
 
+.logo-container
+  display: flex
+  align-items: center
+
+.header-logo
+  height: 32px
+  width: auto
+  object-fit: contain
+
 .logo-title
   display: flex
   align-items: center
@@ -670,7 +682,7 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
   font-size: 1.5rem
 
 .logo-text
-  background: linear-gradient(90deg, #8B5CF6, #EC4899)
+  background: linear-gradient(90deg, #3B82F6, #8B5CF6)
   -webkit-background-clip: text
   -webkit-text-fill-color: transparent
   background-clip: text
@@ -685,6 +697,12 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
   border-radius: 20px
   padding: 6px 24px
   font-weight: 500
+  background: linear-gradient(135deg, #3B82F6, #6366F1)
+  opacity: 0.9
+  transition: opacity 0.3s ease
+  
+  &:hover
+    opacity: 1
 
 .left-drawer
   background: var(--drawer-bg, var(--bg-card-solid))
@@ -703,6 +721,12 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
   padding: 12px 20px
   font-weight: 500
   width: 100%
+  background: linear-gradient(135deg, #3B82F6, #6366F1)
+  opacity: 0.9
+  transition: opacity 0.3s ease
+  
+  &:hover
+    opacity: 1
 
 .menu-list
   .menu-item

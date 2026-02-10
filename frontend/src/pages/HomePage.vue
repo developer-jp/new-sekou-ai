@@ -16,9 +16,9 @@ const uploadedFiles = ref<File[]>([])
 const ACCEPTED_FILE_TYPES = '.pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png,.gif,.webp'
 
 const suggestions = [
-  { icon: 'edit', text: 'メールを書いて', color: '#8B5CF6' },
+  { icon: 'edit', text: 'メールを書いて', color: '#3B82F6' },
   { icon: 'code', text: 'コードを説明して', color: '#6366F1' },
-  { icon: 'lightbulb', text: 'アイデアを出して', color: '#EC4899' },
+  { icon: 'lightbulb', text: 'アイデアを出して', color: '#8B5CF6' },
   { icon: 'translate', text: '翻訳して', color: '#10B981' },
 ]
 
@@ -504,7 +504,7 @@ function getFileIcon(file: File): string {
   line-height: 1.3
 
 .gradient-text
-  background: linear-gradient(90deg, #8B5CF6, #EC4899, #6366F1)
+  background: linear-gradient(90deg, #3B82F6, #8B5CF6, #6366F1)
   -webkit-background-clip: text
   -webkit-text-fill-color: transparent
   background-clip: text
@@ -742,6 +742,12 @@ function getFileIcon(file: File): string {
 
 .send-btn
   margin-left: 8px
+  background: linear-gradient(135deg, #3B82F6, #6366F1)
+  opacity: 0.9
+  transition: opacity 0.3s ease
+  
+  &:hover
+    opacity: 1
 
 .disclaimer
   text-align: center
