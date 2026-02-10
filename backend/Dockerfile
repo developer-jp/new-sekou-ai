@@ -10,7 +10,11 @@ RUN set -xe; \
     pecl channel-update pecl.php.net && \
     apt-get install -yqq \
       apt-utils \
-      libzip-dev zip unzip vim git
+      libzip-dev \
+      libpng-dev \
+      libjpeg62-turbo-dev \
+      libfreetype6-dev \
+      zip unzip vim git
 
 # Use the instructions to install the latest node
 RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
@@ -23,8 +27,9 @@ RUN cd /usr/local/bin && \
     php composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
     php -r "unlink('composer-setup.php');"
 
-# Install pdo-mysql
-RUN docker-php-ext-install pdo_mysql
+# Install required PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg && \
+    docker-php-ext-install pdo_mysql gd zip
 
 # Copy local code to the container image.
 
