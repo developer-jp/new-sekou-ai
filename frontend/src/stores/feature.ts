@@ -60,6 +60,21 @@ export const useFeatureStore = defineStore('feature', () => {
     return false
   }
 
+  async function reorderFeatures(ids: number[]) {
+    const response = await api.reorderFeatures(ids)
+    if (response.success) {
+      // Reorder local array to match the new order
+      const ordered: Feature[] = []
+      for (const id of ids) {
+        const feature = features.value.find(f => f.id === id)
+        if (feature) ordered.push(feature)
+      }
+      features.value = ordered
+      return true
+    }
+    return false
+  }
+
   async function deleteFeature(id: number) {
     const response = await api.deleteFeature(id)
     if (response.success) {
@@ -117,6 +132,7 @@ export const useFeatureStore = defineStore('feature', () => {
     createFeature,
     loadFeature,
     updateFeature,
+    reorderFeatures,
     deleteFeature,
     createPrompt,
     updatePrompt,

@@ -18,7 +18,8 @@ const routes = [
       {
         path: 'settings',
         name: 'settings',
-        component: () => import('../pages/SettingsPage.vue')
+        component: () => import('../pages/SettingsPage.vue'),
+        meta: { requiresAuth: true }
       },
       {
         path: 'history',
@@ -37,6 +38,15 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+router.beforeEach((to) => {
+  if (to.meta.requiresAuth) {
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
+      return { name: 'login' }
+    }
+  }
 })
 
 export default router

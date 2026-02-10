@@ -11,6 +11,7 @@ class Feature extends Model
     protected $fillable = [
         'user_id',
         'title',
+        'sort_order',
     ];
 
     /**

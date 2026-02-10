@@ -5,7 +5,9 @@
       "Bash(composer:*)",
       "Bash(npm create:*)",
       "Bash(npm install:*)",
-      "Bash(brew:*)"
+      "Bash(brew:*)",
+      "Bash(npx vue-tsc:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

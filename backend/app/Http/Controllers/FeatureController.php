@@ -14,6 +14,7 @@ class FeatureController extends Controller
     public function index(): JsonResponse
     {
         $features = Feature::withCount('prompts')
+            ->orderBy('sort_order', 'asc')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -32,9 +33,13 @@ class FeatureController extends Controller
             'title' => 'required|string|max:255',
         ]);
 
+        // Push existing features down to make room at the top
+        Feature::query()->increment('sort_order');
+
         $feature = Feature::create([
             'user_id' => $request->user()->id,
             'title' => $request->title,
+            'sort_order' => 0,
         ]);
 
         return response()->json([
@@ -110,6 +115,32 @@ class FeatureController extends Controller
         return response()->json([
             'success' => true,
             'message' => '機能を削除しました',
+        ]);
+    }
+
+    /**
+     * Reorder features.
+     */
+    public function reorder(Request $request): JsonResponse
+    {
+        if (!$request->user()->is_admin) {
+            return response()->json([
+                'success' => false,
+                'message' => '権限がありません',
+            ], 403);
+        }
+
+        $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'integer|exists:features,id',
+        ]);
+
+        foreach ($request->ids as $index => $id) {
+            Feature::where('id', $id)->update(['sort_order' => $index]);
+        }
+
+        return response()->json([
+            'success' => true,
         ]);
     }
 }

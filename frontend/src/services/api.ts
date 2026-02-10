@@ -340,11 +340,27 @@ class ApiService {
 
   async deleteFeature(id: number): Promise<{ success: boolean }> {
     const url = `${API_BASE_URL}/api/features/${id}`
-    
+
     try {
       const response = await fetch(url, {
         method: 'DELETE',
         headers: this.getHeaders(),
+      })
+
+      return await response.json()
+    } catch (error) {
+      return { success: false }
+    }
+  }
+
+  async reorderFeatures(ids: number[]): Promise<{ success: boolean }> {
+    const url = `${API_BASE_URL}/api/features/reorder`
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ ids }),
       })
 
       return await response.json()
@@ -438,6 +454,7 @@ interface Feature {
   id: number
   user_id: number
   title: string
+  sort_order: number
   prompts_count?: number
   prompts?: FeaturePrompt[]
   created_at: string

@@ -7,6 +7,7 @@ import { useThemeStore } from '../stores/theme'
 import { useConversationStore } from '../stores/conversation'
 import { useChatStore } from '../stores/chat'
 import { useFeatureStore } from '../stores/feature'
+import draggable from 'vuedraggable'
 
 const $q = useQuasar()
 const router = useRouter()
@@ -236,6 +237,11 @@ function closeRightDrawer() {
 }
 
 // Select a prompt and set it as active for chat
+async function onFeatureDragEnd() {
+  const ids = features.value.map(f => f.id)
+  await featureStore.reorderFeatures(ids)
+}
+
 function selectPrompt(prompt: { id: number; title: string; description: string | null; prompt_content: string | null }) {
   if (!selectedFeature.value || !prompt.prompt_content) return
   
@@ -438,7 +444,72 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
                 <q-tooltip>功能追加</q-tooltip>
               </q-btn>
             </div>
-            <q-list v-if="features.length > 0" class="feature-list">
+            <draggable
+              v-if="features.length > 0 && isAdmin"
+              v-model="featureStore.features"
+              item-key="id"
+              handle=".drag-handle"
+              class="feature-list"
+              @end="onFeatureDragEnd"
+            >
+              <template #item="{ element: feature }">
+                <q-item
+                  clickable
+                  v-ripple
+                  class="feature-item"
+                  @click="selectFeature(feature.id)"
+                >
+                  <q-item-section avatar class="drag-handle-section">
+                    <q-icon name="drag_indicator" size="18px" class="drag-handle" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label class="feature-title text-ellipsis" lines="1">
+                      {{ feature.title }}
+                      <q-tooltip>{{ feature.title }}</q-tooltip>
+                    </q-item-label>
+                    <q-item-label caption>
+                      {{ feature.prompts_count || 0 }} プロンプト
+                    </q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-btn
+                      flat
+                      round
+                      dense
+                      size="sm"
+                      icon="more_vert"
+                      class="more-btn"
+                      @click.stop
+                    >
+                      <q-menu anchor="bottom right" self="top right">
+                        <q-list style="min-width: 150px">
+                          <q-item clickable v-close-popup @click="openEditFeatureDialog(feature.id, feature.title)">
+                            <q-item-section avatar>
+                              <q-icon name="edit_note" size="20px" />
+                            </q-item-section>
+                            <q-item-section>機能名編集</q-item-section>
+                          </q-item>
+                          <q-item clickable v-close-popup @click="goToPromptEdit(feature.id)">
+                            <q-item-section avatar>
+                              <q-icon name="edit" size="20px" />
+                            </q-item-section>
+                            <q-item-section>Prompt編集</q-item-section>
+                          </q-item>
+                          <q-separator />
+                          <q-item clickable v-close-popup @click="deleteFeature(feature.id)">
+                            <q-item-section avatar>
+                              <q-icon name="delete" size="20px" color="negative" />
+                            </q-item-section>
+                            <q-item-section class="text-negative">削除</q-item-section>
+                          </q-item>
+                        </q-list>
+                      </q-menu>
+                    </q-btn>
+                  </q-item-section>
+                </q-item>
+              </template>
+            </draggable>
+            <q-list v-else-if="features.length > 0" class="feature-list">
               <q-item
                 v-for="feature in features"
                 :key="feature.id"
@@ -456,40 +527,6 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
                     {{ feature.prompts_count || 0 }} プロンプト
                   </q-item-label>
                 </q-item-section>
-                <q-item-section v-if="isAdmin" side>
-                  <q-btn
-                    flat
-                    round
-                    dense
-                    size="sm"
-                    icon="more_vert"
-                    class="more-btn"
-                  >
-                    <q-menu anchor="bottom right" self="top right">
-                      <q-list style="min-width: 150px">
-                        <q-item clickable v-close-popup @click="openEditFeatureDialog(feature.id, feature.title)">
-                          <q-item-section avatar>
-                            <q-icon name="edit_note" size="20px" />
-                          </q-item-section>
-                          <q-item-section>機能名編集</q-item-section>
-                        </q-item>
-                        <q-item clickable v-close-popup @click="goToPromptEdit(feature.id)">
-                          <q-item-section avatar>
-                            <q-icon name="edit" size="20px" />
-                          </q-item-section>
-                          <q-item-section>Prompt編集</q-item-section>
-                        </q-item>
-                        <q-separator />
-                        <q-item clickable v-close-popup @click="deleteFeature(feature.id)">
-                          <q-item-section avatar>
-                            <q-icon name="delete" size="20px" color="negative" />
-                          </q-item-section>
-                          <q-item-section class="text-negative">削除</q-item-section>
-                        </q-item>
-                      </q-list>
-                    </q-menu>
-                  </q-btn>
-                </q-item-section>
               </q-item>
             </q-list>
             <div v-else class="no-features">
@@ -499,8 +536,8 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
         </div>
       </q-scroll-area>
 
-      <!-- 底部設定ボタン（固定） -->
-      <div class="bottom-menu-fixed">
+      <!-- 底部設定ボタン（固定・ログイン時のみ） -->
+      <div v-if="userStore.isLoggedIn" class="bottom-menu-fixed">
         <q-separator />
         <q-item
           clickable
@@ -847,6 +884,16 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
 
     .more-btn
       opacity: 1
+
+.drag-handle-section
+  min-width: 24px !important
+  padding-right: 4px
+
+.drag-handle
+  cursor: grab
+  color: var(--text-tertiary)
+  &:active
+    cursor: grabbing
 
 .feature-title
   font-size: 0.8rem

@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/conversations/{id}', [ConversationController::class, 'destroy']);
 
     // Feature routes - protected (write operations, admin only)
+    Route::post('/features/reorder', [FeatureController::class, 'reorder']);
     Route::post('/features', [FeatureController::class, 'store']);
     Route::put('/features/{id}', [FeatureController::class, 'update']);
     Route::delete('/features/{id}', [FeatureController::class, 'destroy']);
