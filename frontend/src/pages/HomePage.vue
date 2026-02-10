@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
 import { useQuasar } from 'quasar'
+import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useConversationStore } from '../stores/conversation'
+import { useUserStore } from '../stores/user'
 import type { ChatHistory } from '../services/api'
 
+const router = useRouter()
 const chatStore = useChatStore()
 const conversationStore = useConversationStore()
+const userStore = useUserStore()
+const isLoggedIn = computed(() => userStore.isLoggedIn)
 
 const inputMessage = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -30,6 +35,7 @@ const isPromptCollapsed = computed(() => chatStore.isPromptCollapsed)
 const hasActivePrompt = computed(() => chatStore.hasActivePrompt)
 
 async function handleSend() {
+  if (!isLoggedIn.value) return
   const message = inputMessage.value.trim()
   if ((!message && uploadedFiles.value.length === 0) || isLoading.value) return
 
@@ -286,8 +292,8 @@ function getFileIcon(file: File): string {
         </h1>
       </div>
 
-      <!-- Suggestions Grid (only shown when no messages) -->
-      <div v-if="!hasMessages" class="suggestions-grid">
+      <!-- Suggestions Grid (only shown when no messages and logged in) -->
+      <div v-if="!hasMessages && isLoggedIn" class="suggestions-grid">
         <q-card
           v-for="(suggestion, index) in suggestions"
           :key="index"
@@ -346,129 +352,148 @@ function getFileIcon(file: File): string {
 
       <!-- Input Section -->
       <div class="input-section">
-        <!-- Active Prompt Display -->
-        <div v-if="hasActivePrompt" class="active-prompt-section">
-          <div class="active-prompt-header">
-            <div class="active-prompt-info">
-              <span class="prompt-icon">💡</span>
-              <span v-if="isPromptCollapsed" class="active-prompt-feature">{{ activePrompt?.featureTitle }}</span>
-              <span v-else class="active-prompt-title">{{ activePrompt?.title }}</span>
-            </div>
-            <div class="active-prompt-actions">
-              <q-btn
-                flat
-                round
-                dense
-                size="sm"
-                :icon="isPromptCollapsed ? 'expand_more' : 'expand_less'"
-                @click="chatStore.togglePromptCollapsed()"
-              >
-                <q-tooltip>{{ isPromptCollapsed ? '利用説明を表示' : '簡略化' }}</q-tooltip>
-              </q-btn>
-              <q-btn
-                flat
-                round
-                dense
-                size="sm"
-                icon="close"
-                @click="chatStore.clearActivePrompt()"
-              >
-                <q-tooltip>プロンプトを解除</q-tooltip>
-              </q-btn>
-            </div>
-          </div>
-          <div v-if="!isPromptCollapsed && activePrompt?.description" class="active-prompt-content">
-            <div class="usage-label">
-              <q-icon name="info" size="14px" color="grey" />
-              <span>利用説明</span>
-            </div>
-            <div class="active-prompt-description">
-              {{ activePrompt.description }}
-            </div>
-          </div>
-        </div>
-        
-        <!-- File Preview Section -->
-        <div v-if="uploadedFiles.length > 0" class="file-preview-section">
-          <div
-            v-for="(file, index) in uploadedFiles"
-            :key="index"
-            class="file-chip"
-          >
-            <q-icon :name="getFileIcon(file)" size="16px" />
-            <span class="file-name">{{ file.name }}</span>
+        <!-- Login Required Notice -->
+        <div v-if="!isLoggedIn" class="login-required-section">
+          <div class="login-required-content">
+            <q-icon name="lock" size="20px" color="grey-6" />
+            <span class="login-required-text">チャットを利用するにはログインが必要です</span>
             <q-btn
-              flat
-              round
-              dense
-              size="xs"
-              icon="close"
-              class="remove-file-btn"
-              @click="removeFile(index)"
+              unelevated
+              color="primary"
+              label="ログイン"
+              size="sm"
+              class="login-required-btn"
+              @click="router.push('/login')"
             />
           </div>
         </div>
-        
-        <!-- Hidden File Input -->
-        <input
-          ref="fileInput"
-          type="file"
-          :accept="ACCEPTED_FILE_TYPES"
-          multiple
-          hidden
-          @change="handleFileSelected"
-        />
-        
-        <div class="input-wrapper">
-          <q-input
-            v-model="inputMessage"
-            placeholder="質問を入力してください..."
-            borderless
-            type="textarea"
-            autogrow
-            class="chat-input"
-            :disable="isLoading"
-            @keydown="handleKeyDown"
-          >
-            <template #prepend>
-              <q-icon name="auto_awesome" color="primary" />
-            </template>
-            <template #append>
+
+        <!-- Chat Input (only for logged in users) -->
+        <template v-else>
+          <!-- Active Prompt Display -->
+          <div v-if="hasActivePrompt" class="active-prompt-section">
+            <div class="active-prompt-header">
+              <div class="active-prompt-info">
+                <span class="prompt-icon">💡</span>
+                <span v-if="isPromptCollapsed" class="active-prompt-feature">{{ activePrompt?.featureTitle }}</span>
+                <span v-else class="active-prompt-title">{{ activePrompt?.title }}</span>
+              </div>
+              <div class="active-prompt-actions">
+                <q-btn
+                  flat
+                  round
+                  dense
+                  size="sm"
+                  :icon="isPromptCollapsed ? 'expand_more' : 'expand_less'"
+                  @click="chatStore.togglePromptCollapsed()"
+                >
+                  <q-tooltip>{{ isPromptCollapsed ? '利用説明を表示' : '簡略化' }}</q-tooltip>
+                </q-btn>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  size="sm"
+                  icon="close"
+                  @click="chatStore.clearActivePrompt()"
+                >
+                  <q-tooltip>プロンプトを解除</q-tooltip>
+                </q-btn>
+              </div>
+            </div>
+            <div v-if="!isPromptCollapsed && activePrompt?.description" class="active-prompt-content">
+              <div class="usage-label">
+                <q-icon name="info" size="14px" color="grey" />
+                <span>利用説明</span>
+              </div>
+              <div class="active-prompt-description">
+                {{ activePrompt.description }}
+              </div>
+            </div>
+          </div>
+
+          <!-- File Preview Section -->
+          <div v-if="uploadedFiles.length > 0" class="file-preview-section">
+            <div
+              v-for="(file, index) in uploadedFiles"
+              :key="index"
+              class="file-chip"
+            >
+              <q-icon :name="getFileIcon(file)" size="16px" />
+              <span class="file-name">{{ file.name }}</span>
               <q-btn
                 flat
                 round
                 dense
-                icon="attach_file"
-                class="action-btn"
-                :disable="isLoading"
-                @click="handleAttachClick"
-              >
-                <q-tooltip>ファイルを添付 (PDF, Word, Excel, 画像)</q-tooltip>
-              </q-btn>
-              <q-btn
-                flat
-                round
-                dense
-                icon="mic"
-                class="action-btn"
-                :disable="isLoading"
+                size="xs"
+                icon="close"
+                class="remove-file-btn"
+                @click="removeFile(index)"
               />
-              <q-btn
-                round
-                dense
-                icon="send"
-                color="primary"
-                class="send-btn"
-                :disable="(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading"
-                :loading="isLoading"
-                @click="handleSend"
-              />
-            </template>
-          </q-input>
-        </div>
-        <p class="disclaimer">
-          SekouAI は間違いを起こす可能性があります。重要な情報はご確認ください。
-        </p>
+            </div>
+          </div>
+
+          <!-- Hidden File Input -->
+          <input
+            ref="fileInput"
+            type="file"
+            :accept="ACCEPTED_FILE_TYPES"
+            multiple
+            hidden
+            @change="handleFileSelected"
+          />
+
+          <div class="input-wrapper">
+            <q-input
+              v-model="inputMessage"
+              placeholder="質問を入力してください..."
+              borderless
+              type="textarea"
+              autogrow
+              class="chat-input"
+              :disable="isLoading"
+              @keydown="handleKeyDown"
+            >
+              <template #prepend>
+                <q-icon name="auto_awesome" color="primary" />
+              </template>
+              <template #append>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  icon="attach_file"
+                  class="action-btn"
+                  :disable="isLoading"
+                  @click="handleAttachClick"
+                >
+                  <q-tooltip>ファイルを添付 (PDF, Word, Excel, 画像)</q-tooltip>
+                </q-btn>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  icon="mic"
+                  class="action-btn"
+                  :disable="isLoading"
+                />
+                <q-btn
+                  round
+                  dense
+                  icon="send"
+                  color="primary"
+                  class="send-btn"
+                  :disable="(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading"
+                  :loading="isLoading"
+                  @click="handleSend"
+                />
+              </template>
+            </q-input>
+          </div>
+          <p class="disclaimer">
+            SekouAI は間違いを起こす可能性があります。重要な情報はご確認ください。
+          </p>
+        </template>
       </div>
     </div>
   </q-page>
@@ -754,6 +779,30 @@ function getFileIcon(file: File): string {
   color: var(--text-muted)
   font-size: 0.75rem
   margin-top: 16px
+
+// Login Required Section
+.login-required-section
+  width: 100%
+
+.login-required-content
+  display: flex
+  align-items: center
+  justify-content: center
+  gap: 10px
+  background: var(--bg-input)
+  border: 1px solid var(--border-color)
+  border-radius: 28px
+  padding: 14px 24px
+
+.login-required-text
+  color: var(--text-secondary)
+  font-size: 0.9rem
+
+.login-required-btn
+  border-radius: 20px
+  padding: 4px 20px
+  font-weight: 500
+  background: linear-gradient(135deg, #3B82F6, #6366F1)
 
 // Active Prompt Section
 .active-prompt-section

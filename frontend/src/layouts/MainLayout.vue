@@ -355,7 +355,7 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
             color="primary"
             icon="add"
             label="新しいチャット"
-            class="new-chat-btn q-mb-md"
+            class="new-chat-btn q-mb-sm"
             @click="handleMenuClick('new')"
           />
 
@@ -372,14 +372,14 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
                 :class="{ active: conv.id === currentConversationId }"
                 @click="selectConversation(conv.id)"
               >
-                <q-item-section avatar>
-                  <q-icon name="chat_bubble_outline" size="20px" />
+                <q-item-section avatar class="conv-icon-section">
+                  <q-icon name="chat_bubble_outline" size="18px" />
                 </q-item-section>
-                <q-item-section>
+                <q-item-section class="conv-text-section">
                   <q-item-label class="conversation-title" lines="1">
                     {{ conv.title || '新しいチャット' }}
                   </q-item-label>
-                  <q-item-label caption>
+                  <q-item-label caption class="conv-date">
                     {{ formatDate(conv.last_message_at) }}
                   </q-item-label>
                 </q-item-section>
@@ -714,17 +714,18 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
   display: flex
   flex-direction: column
   height: 100%
-  padding: 16px
+  padding: 12px 12px 60px
 
 .new-chat-btn
-  border-radius: 24px
-  padding: 12px 20px
+  border-radius: 20px
+  padding: 8px 16px
   font-weight: 500
   width: 100%
+  font-size: 0.85rem
   background: linear-gradient(135deg, #3B82F6, #6366F1)
   opacity: 0.9
   transition: opacity 0.3s ease
-  
+
   &:hover
     opacity: 1
 
@@ -742,27 +743,25 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
   margin-top: auto
 
 .conversation-section
-  flex: 1
-  overflow-y: auto
-  margin-top: 16px
+  margin-top: 12px
 
 .section-title
-  font-size: 0.75rem
+  font-size: 0.7rem
   font-weight: 600
   color: var(--text-tertiary)
   text-transform: uppercase
   letter-spacing: 0.05em
   padding: 0 8px
-  margin-bottom: 8px
+  margin-bottom: 4px
 
 .conversation-list
   padding: 0
 
 .conversation-item
   border-radius: 8px
-  margin-bottom: 2px
-  padding: 8px 12px
-  min-height: 48px
+  margin-bottom: 1px
+  padding: 6px 10px
+  min-height: 40px
   color: var(--text-secondary)
   transition: all 0.2s ease
 
@@ -777,9 +776,22 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
     background: var(--bg-accent, rgba(139, 92, 246, 0.1))
     color: var(--accent-primary)
 
+.conv-icon-section
+  min-width: 30px !important
+  padding-right: 8px
+
+.conv-text-section
+  min-width: 0
+
 .conversation-title
-  font-size: 0.875rem
+  font-size: 0.8rem
   font-weight: 500
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+
+.conv-date
+  font-size: 0.7rem
 
 .delete-btn
   opacity: 0
@@ -791,15 +803,17 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
 
 .no-conversations
   color: var(--text-tertiary)
-  font-size: 0.875rem
+  font-size: 0.8rem
   text-align: center
-  padding: 24px 16px
+  padding: 16px 12px
 
 .view-all-item
   border-radius: 8px
-  margin-top: 8px
+  margin-top: 4px
   color: var(--accent-primary)
-  font-size: 0.875rem
+  font-size: 0.8rem
+  min-height: 36px
+  padding: 4px 10px
   transition: all 0.2s ease
 
   &:hover
@@ -807,23 +821,23 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
 
 // Feature section styles
 .feature-section
-  margin-top: 16px
+  margin-top: 12px
 
 .section-header
   display: flex
   align-items: center
   justify-content: space-between
   padding: 0 8px
-  margin-bottom: 8px
+  margin-bottom: 4px
 
 .feature-list
   padding: 0
 
 .feature-item
   border-radius: 8px
-  margin-bottom: 2px
-  padding: 8px 12px
-  min-height: 48px
+  margin-bottom: 1px
+  padding: 6px 10px
+  min-height: 40px
   color: var(--text-secondary)
   transition: all 0.2s ease
 
@@ -835,7 +849,7 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
       opacity: 1
 
 .feature-title
-  font-size: 0.875rem
+  font-size: 0.8rem
   font-weight: 500
   max-width: 180px
 
@@ -855,9 +869,9 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
 
 .no-features
   color: var(--text-tertiary)
-  font-size: 0.875rem
+  font-size: 0.8rem
   text-align: center
-  padding: 16px
+  padding: 12px
 
 .bottom-menu-fixed
   position: absolute
@@ -865,7 +879,7 @@ function selectPrompt(prompt: { id: number; title: string; description: string |
   left: 0
   right: 0
   background: var(--drawer-bg, var(--bg-card-solid))
-  padding: 8px 16px
+  padding: 4px 12px
 
   .menu-item
     border-radius: 12px
