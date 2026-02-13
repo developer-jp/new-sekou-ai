@@ -57,6 +57,7 @@ function flushTypewriter() {
 
 const ACCEPTED_FILE_TYPES = '.pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png,.gif,.webp'
 const ACCEPTED_EXTENSIONS = new Set(['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'jpg', 'jpeg', 'png', 'gif', 'webp'])
+const MAX_TOTAL_SIZE = 30 * 1024 * 1024 // 30MB
 const isDragging = ref(false)
 let dragCounter = 0
 
@@ -321,6 +322,25 @@ function copyToClipboard(content: string) {
 }
 
 // File upload handlers
+function getTotalFileSize(files: File[]): number {
+  return files.reduce((sum, f) => sum + f.size, 0)
+}
+
+function addFilesWithSizeCheck(newFiles: File[]) {
+  const currentSize = getTotalFileSize(uploadedFiles.value)
+  const addSize = getTotalFileSize(newFiles)
+  if (currentSize + addSize > MAX_TOTAL_SIZE) {
+    $q.notify({
+      type: 'warning',
+      message: `ファイルの合計サイズが30MBを超えています（現在: ${((currentSize + addSize) / 1024 / 1024).toFixed(1)}MB）`,
+      position: 'top',
+      timeout: 3000,
+    })
+    return
+  }
+  uploadedFiles.value = [...uploadedFiles.value, ...newFiles]
+}
+
 function handleAttachClick() {
   fileInput.value?.click()
 }
@@ -329,7 +349,7 @@ function handleFileSelected(event: Event) {
   const target = event.target as HTMLInputElement
   if (target.files) {
     const newFiles = Array.from(target.files)
-    uploadedFiles.value = [...uploadedFiles.value, ...newFiles]
+    addFilesWithSizeCheck(newFiles)
     target.value = '' // Reset to allow selecting same file again
   }
 }
@@ -368,7 +388,7 @@ function handleDrop(e: DragEvent) {
     return ACCEPTED_EXTENSIONS.has(ext)
   })
   if (droppedFiles.length > 0) {
-    uploadedFiles.value = [...uploadedFiles.value, ...droppedFiles]
+    addFilesWithSizeCheck(droppedFiles)
   }
 }
 
@@ -777,6 +797,7 @@ function getFileIcon(file: File): string {
   &--assistant
     flex-direction: row
     align-self: flex-start
+    max-width: 100%
 
     .message-avatar
       background: linear-gradient(135deg, #10B981, #059669)
@@ -901,10 +922,10 @@ function getFileIcon(file: File): string {
 /* Input Section Styles */
 .input-section
   position: sticky
-  bottom: 20px
+  bottom: 8px
   left: 0
   right: 0
-  padding: 0 0 10px 0
+  padding: 0
   margin-top: auto
   z-index: 10
   width: 100%
@@ -986,7 +1007,7 @@ function getFileIcon(file: File): string {
   text-align: center
   font-size: 0.75rem
   color: var(--text-tertiary)
-  margin-top: 12px
+  margin-top: 6px
   opacity: 0.8
 
 
