@@ -18,7 +18,47 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploadedFiles = ref<File[]>([])
 
+// Typewriter effect state
+let typewriterBuffer = ''
+let typewriterDisplayed = ''
+let typewriterTimer: ReturnType<typeof setInterval> | null = null
+const TYPEWRITER_SPEED = 15 // ms per character (fast)
+
+function startTypewriter() {
+  if (typewriterTimer) return
+  typewriterTimer = setInterval(() => {
+    if (typewriterDisplayed.length < typewriterBuffer.length) {
+      // Render multiple chars per tick for speed
+      const charsToAdd = Math.min(2, typewriterBuffer.length - typewriterDisplayed.length)
+      typewriterDisplayed = typewriterBuffer.slice(0, typewriterDisplayed.length + charsToAdd)
+      chatStore.updateLastAssistantMessage(typewriterDisplayed)
+      scrollToBottom()
+    } else {
+      // Buffer caught up, wait for more data
+    }
+  }, TYPEWRITER_SPEED)
+}
+
+function stopTypewriter() {
+  if (typewriterTimer) {
+    clearInterval(typewriterTimer)
+    typewriterTimer = null
+  }
+}
+
+function flushTypewriter() {
+  stopTypewriter()
+  if (typewriterBuffer && typewriterDisplayed !== typewriterBuffer) {
+    typewriterDisplayed = typewriterBuffer
+    chatStore.updateLastAssistantMessage(typewriterDisplayed)
+    scrollToBottom()
+  }
+}
+
 const ACCEPTED_FILE_TYPES = '.pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png,.gif,.webp'
+const ACCEPTED_EXTENSIONS = new Set(['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'jpg', 'jpeg', 'png', 'gif', 'webp'])
+const isDragging = ref(false)
+let dragCounter = 0
 
 const suggestions = [
   { icon: 'edit', text: 'メールを書いて', color: '#3B82F6' },
@@ -125,7 +165,11 @@ async function handleSend() {
 
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
-    let accumulatedContent = ''
+
+    // Reset typewriter state
+    typewriterBuffer = ''
+    typewriterDisplayed = ''
+    startTypewriter()
 
     if (reader) {
       while (true) {
@@ -153,10 +197,7 @@ async function handleSend() {
                 })
               }
               if (parsed.content) {
-                accumulatedContent += parsed.content
-                chatStore.updateLastAssistantMessage(accumulatedContent)
-                await nextTick()
-                scrollToBottom()
+                typewriterBuffer += parsed.content
               } else if (parsed.grounding) {
                 chatStore.updateLastAssistantGrounding(parsed.grounding.sources, parsed.grounding.search_queries)
                 await nextTick()
@@ -172,14 +213,27 @@ async function handleSend() {
       }
     }
 
-    if (!accumulatedContent) {
+    // Wait for typewriter to finish rendering remaining buffer
+    await new Promise<void>((resolve) => {
+      const waitTimer = setInterval(() => {
+        if (typewriterDisplayed.length >= typewriterBuffer.length) {
+          clearInterval(waitTimer)
+          resolve()
+        }
+      }, TYPEWRITER_SPEED)
+    })
+    flushTypewriter()
+
+    if (!typewriterBuffer) {
       chatStore.updateLastAssistantMessage('申し訳ありませんが、応答を取得できませんでした。')
     }
   } catch (error) {
     console.error('Chat error:', error)
+    flushTypewriter()
     chatStore.updateLastAssistantMessage('申し訳ありませんが、エラーが発生しました。もう一度お試しください。')
     chatStore.setError('Network error')
   } finally {
+    stopTypewriter()
     chatStore.setLoading(false)
     await nextTick()
     scrollToBottom()
@@ -282,6 +336,40 @@ function handleFileSelected(event: Event) {
 
 function removeFile(index: number) {
   uploadedFiles.value.splice(index, 1)
+}
+
+function handleDragEnter(e: DragEvent) {
+  e.preventDefault()
+  dragCounter++
+  if (e.dataTransfer?.types.includes('Files')) {
+    isDragging.value = true
+  }
+}
+
+function handleDragOver(e: DragEvent) {
+  e.preventDefault()
+}
+
+function handleDragLeave(e: DragEvent) {
+  e.preventDefault()
+  dragCounter--
+  if (dragCounter === 0) {
+    isDragging.value = false
+  }
+}
+
+function handleDrop(e: DragEvent) {
+  e.preventDefault()
+  dragCounter = 0
+  isDragging.value = false
+  if (isLoading.value || !e.dataTransfer?.files.length) return
+  const droppedFiles = Array.from(e.dataTransfer.files).filter(file => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    return ACCEPTED_EXTENSIONS.has(ext)
+  })
+  if (droppedFiles.length > 0) {
+    uploadedFiles.value = [...uploadedFiles.value, ...droppedFiles]
+  }
 }
 
 function getFileIcon(file: File): string {
@@ -497,7 +585,19 @@ function getFileIcon(file: File): string {
             @change="handleFileSelected"
           />
 
-          <div class="input-wrapper">
+          <div
+            class="input-wrapper input-capsule"
+            :class="{ 'drag-over': isDragging }"
+            @dragenter="handleDragEnter"
+            @dragover="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop="handleDrop"
+          >
+            <!-- Drag overlay -->
+            <div v-if="isDragging" class="drag-overlay">
+              <q-icon name="upload_file" size="28px" />
+              <span>ファイルをドロップ</span>
+            </div>
             <q-input
               v-model="inputMessage"
               placeholder="質問を入力してください..."
@@ -572,13 +672,16 @@ function getFileIcon(file: File): string {
   justify-content: center
   min-height: calc(100vh - 50px)
   padding: 20px
+  background: radial-gradient(circle at 50% 0%, var(--bg-secondary) 0%, var(--bg-primary) 100%)
 
 .content-container
   width: 100%
-  max-width: 1040px
+  max-width: 900px
   display: flex
   flex-direction: column
-  gap: 40px
+  gap: 32px
+  position: relative
+  z-index: 1
 
   &.has-messages
     justify-content: flex-end
@@ -596,11 +699,12 @@ function getFileIcon(file: File): string {
   line-height: 1.3
 
 .gradient-text
-  background: linear-gradient(90deg, #3B82F6, #8B5CF6, #6366F1)
+  background: linear-gradient(135deg, #2563EB, #7C3AED, #DB2777)
   -webkit-background-clip: text
   -webkit-text-fill-color: transparent
   background-clip: text
-  font-size: 3rem
+  font-size: 3.5rem
+  letter-spacing: -0.02em
 
 .subtitle
   display: block
@@ -627,9 +731,9 @@ function getFileIcon(file: File): string {
 
   &:hover
     background: var(--bg-hover)
-    border-color: var(--border-focus)
-    transform: translateY(-2px)
-    box-shadow: 0 4px 16px var(--shadow-color)
+    border-color: var(--primary-color, #3B82F6)
+    transform: translateY(-4px)
+    box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.15)
 
 .suggestion-text
   color: var(--text-secondary)
@@ -660,7 +764,8 @@ function getFileIcon(file: File): string {
     .message-content
       background: linear-gradient(135deg, #8B5CF6, #6366F1)
       color: white
-      border-radius: 20px 20px 4px 20px
+      border-radius: 24px 24px 4px 24px
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15)
 
     .message-role
       text-align: right
@@ -792,60 +897,98 @@ function getFileIcon(file: File): string {
 .message-loading
   padding: 8px 0
 
-@keyframes fadeIn
-  from
-    opacity: 0
-    transform: translateY(10px)
-  to
-    opacity: 1
-    transform: translateY(0)
 
+/* Input Section Styles */
 .input-section
-  width: 100%
+  position: sticky
+  bottom: 20px
+  left: 0
+  right: 0
+  padding: 0 0 10px 0
   margin-top: auto
-  padding-top: 16px
+  z-index: 10
+  width: 100%
 
-.input-wrapper
-  background: var(--bg-input)
+.input-capsule
+  background: var(--bg-card)
   border: 1px solid var(--border-color)
   border-radius: 28px
+  box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.1), 0 4px 8px -2px rgba(0, 0, 0, 0.05)
   padding: 8px 16px
-  transition: all 0.3s ease
-  box-shadow: 0 2px 12px var(--shadow-color)
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)
+  backdrop-filter: blur(12px)
+  position: relative
 
   &:focus-within
-    background: var(--bg-input-focus)
-    border-color: var(--border-focus)
-    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.15)
+    border-color: var(--primary-color, #3B82F6)
+    box-shadow: 0 12px 48px -8px rgba(59, 130, 246, 0.2), 0 8px 16px -4px rgba(59, 130, 246, 0.1)
+    transform: translateY(-2px)
+
+  &.drag-over
+    border-color: #3B82F6
+    border-style: dashed
+    background: rgba(59, 130, 246, 0.05)
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15)
+
+.drag-overlay
+  position: absolute
+  inset: 0
+  display: flex
+  align-items: center
+  justify-content: center
+  gap: 8px
+  background: rgba(59, 130, 246, 0.08)
+  border-radius: 28px
+  color: #3B82F6
+  font-size: 0.9rem
+  font-weight: 500
+  z-index: 10
+  pointer-events: none
 
 .chat-input
   :deep(.q-field__control)
-    color: var(--text-primary)
-
-  :deep(input)
-    color: var(--text-primary)
-    &::placeholder
-      color: var(--text-muted)
+    height: auto
+    min-height: 44px
+    
+  :deep(.q-field__native)
+    padding-top: 10px
+    padding-bottom: 10px
+    line-height: 1.5
 
 .action-btn
-  color: var(--text-tertiary)
+  opacity: 0.6
+  transition: all 0.2s ease
+  color: var(--text-secondary)
+  
   &:hover
+    opacity: 1
+    background: rgba(0, 0, 0, 0.05)
     color: var(--text-primary)
 
 .send-btn
   margin-left: 8px
-  background: linear-gradient(135deg, #3B82F6, #6366F1)
-  opacity: 0.9
-  transition: opacity 0.3s ease
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3)
+  transition: all 0.3s ease
   
   &:hover
-    opacity: 1
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4)
+    transform: scale(1.05)
+  
+  &:active
+    transform: scale(0.95)
+
+.grounding-active
+  color: var(--accent-primary)
+  background: rgba(59, 130, 246, 0.1)
+  opacity: 1
 
 .disclaimer
   text-align: center
-  color: var(--text-muted)
   font-size: 0.75rem
-  margin-top: 16px
+  color: var(--text-tertiary)
+  margin-top: 12px
+  opacity: 0.8
+
 
 // Login Required Section
 .login-required-section
@@ -957,11 +1100,7 @@ function getFileIcon(file: File): string {
   &:hover
     color: var(--text-primary)
 
-// Grounding toggle
-.grounding-active
-  background: linear-gradient(135deg, #3B82F6, #6366F1) !important
-  color: white !important
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35)
+
 
 // Grounding section
 .grounding-section
